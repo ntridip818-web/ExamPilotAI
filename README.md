@@ -34,3 +34,10 @@ Help every student receive verified official information at the right time.
 ## Current Status
 
 🚧 Planning & MVP Development
+## Roadmap
+
+- ✅ Project Planning
+- ✅ System Architecture
+- 🚧 MVP Development
+- ⏳ Testing
+- ⏳ Beta Release
