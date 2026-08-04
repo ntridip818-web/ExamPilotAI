@@ -1,0 +1,13 @@
+{
+  "name": "ExamPilotAI",
+  "short_name": "ExamPilotAI",
+  "description": "Never miss a government exam notification, deadline, or reminder.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#FAF6EC",
+  "theme_color": "#1B2A4A",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
