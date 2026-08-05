@@ -1,4 +1,4 @@
-const API_BASE_URL = "https://YOUR-BACKEND-URL-HERE.onrender.com";
+const API_BASE_URL = "https://exampilotai.onrender.com";
 
 const board = document.getElementById("board");
 const loadingState = document.getElementById("loadingState");
