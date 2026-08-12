@@ -63,3 +63,4 @@ def update_user_profile(
     db.refresh(user)
 
     return user
+
