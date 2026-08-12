@@ -12,6 +12,13 @@ class UserCreate(BaseModel):
     category: Optional[str] = None
 
 
+class UserProfileUpdate(BaseModel):
+    full_name: Optional[str] = None
+    state: Optional[str] = None
+    education_level: Optional[str] = None
+    category: Optional[str] = None
+
+
 class UserOut(BaseModel):
     id: int
     email: str
