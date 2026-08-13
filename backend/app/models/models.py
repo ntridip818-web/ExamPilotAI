@@ -1,5 +1,13 @@
 from sqlalchemy import (
-    Column, Integer, String, Boolean, ForeignKey, DateTime, Text, Enum
+    Column,
+    Integer,
+    String,
+    Boolean,
+    ForeignKey,
+    DateTime,
+    Text,
+    Enum,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -33,6 +41,14 @@ class User(Base):
 
 class Exam(Base):
     __tablename__ = "exams"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "title",
+            "organization",
+            name="uq_exam_title_organization",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, nullable=False, index=True)
