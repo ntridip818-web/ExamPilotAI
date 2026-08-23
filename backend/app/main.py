@@ -1,13 +1,13 @@
-from fastapi import FastAPI, Depends, Header, HTTPException
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
+from app.core.auth import require_admin
 from app.core.database import Base, engine, get_db
 from app.models.models import Exam, SavedExam, Reminder
 from app.routers import exams, users, saved_exams, reminders
 
 import os
-import secrets
 
 
 Base.metadata.create_all(bind=engine)
@@ -47,14 +47,9 @@ def root():
 
 @app.post("/admin/cleanup-duplicate-exams")
 def cleanup_duplicate_exams(
-    x_cleanup_token: str = Header(...),
+    _: dict = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    cleanup_token = os.getenv("CLEANUP_TOKEN")
-
-    if not cleanup_token or not secrets.compare_digest(x_cleanup_token, cleanup_token):
-        raise HTTPException(status_code=403, detail="Invalid cleanup token")
-
     exams = (
         db.query(Exam)
         .order_by(Exam.title, Exam.organization, Exam.id.asc())
