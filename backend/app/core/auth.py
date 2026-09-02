@@ -7,14 +7,24 @@ from typing import Any, Dict
 import firebase_admin
 from firebase_admin import auth, credentials
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.models import User
-from sqlalchemy.orm import Session
 
 
-bearer_scheme = HTTPBearer(auto_error=False)
+# Firebase/user endpoints use the standard Bearer authorization scheme.
+bearer_scheme = HTTPBearer(auto_error=False, scheme_name="FirebaseBearer")
+
+# Maintenance endpoints use a separate header so Swagger can authorize it
+# independently from Firebase Bearer authentication.
+cleanup_token_scheme = APIKeyHeader(
+    name="X-Cleanup-Token",
+    auto_error=False,
+    scheme_name="CleanupToken",
+    description="Server-side maintenance token for admin cleanup operations.",
+)
 
 
 @lru_cache(maxsize=1)
@@ -84,12 +94,13 @@ def require_admin(
 
 
 def require_cleanup_token(
-    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    token: str | None = Depends(cleanup_token_scheme),
 ) -> None:
     """Protect maintenance endpoints with the dedicated CLEANUP_TOKEN secret.
 
-    This is intentionally separate from Firebase authentication: the cleanup
-    token is a server-side maintenance secret, not a Firebase ID token.
+    The cleanup secret intentionally uses X-Cleanup-Token rather than the
+    Firebase Bearer scheme. This keeps Swagger/OpenAPI authorization for
+    normal users separate from the server-side maintenance credential.
     """
     expected = os.getenv("CLEANUP_TOKEN", "").strip()
 
@@ -99,16 +110,16 @@ def require_cleanup_token(
             detail="Cleanup authentication is not configured",
         )
 
-    if credentials is None or credentials.scheme.lower() != "bearer":
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-            headers={"WWW-Authenticate": "Bearer"},
+            detail="Cleanup authentication required",
+            headers={"WWW-Authenticate": "ApiKey"},
         )
 
-    if not secrets.compare_digest(credentials.credentials, expected):
+    if not secrets.compare_digest(token, expected):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid cleanup authentication token",
-            headers={"WWW-Authenticate": "Bearer"},
+            headers={"WWW-Authenticate": "ApiKey"},
         )
