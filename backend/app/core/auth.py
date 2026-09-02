@@ -1,5 +1,6 @@
 import json
 import os
+import secrets
 from functools import lru_cache
 from typing import Any, Dict
 
@@ -80,3 +81,34 @@ def require_admin(
     if not uid or uid not in admins:
         raise HTTPException(status_code=403, detail="Admin access required")
     return token
+
+
+def require_cleanup_token(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> None:
+    """Protect maintenance endpoints with the dedicated CLEANUP_TOKEN secret.
+
+    This is intentionally separate from Firebase authentication: the cleanup
+    token is a server-side maintenance secret, not a Firebase ID token.
+    """
+    expected = os.getenv("CLEANUP_TOKEN", "").strip()
+
+    if not expected:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Cleanup authentication is not configured",
+        )
+
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not secrets.compare_digest(credentials.credentials, expected):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid cleanup authentication token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
