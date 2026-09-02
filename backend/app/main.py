@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
-from app.core.auth import require_admin
+from app.core.auth import require_cleanup_token
 from app.core.database import Base, engine, get_db
 from app.models.models import Exam, SavedExam, Reminder
 from app.routers import exams, users, saved_exams, reminders
@@ -47,7 +47,7 @@ def root():
 
 @app.post("/admin/cleanup-duplicate-exams")
 def cleanup_duplicate_exams(
-    _: dict = Depends(require_admin),
+    _: None = Depends(require_cleanup_token),
     db: Session = Depends(get_db),
 ):
     exams = (
