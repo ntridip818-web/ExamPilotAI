@@ -1,24 +1,29 @@
-import json
 import os
 import secrets
 from functools import lru_cache
 from typing import Any, Dict
 
-import firebase_admin
-from firebase_admin import auth, credentials
+import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
+from jwt import PyJWKClient
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.models import User
 
 
-# Firebase/user endpoints use the standard Bearer authorization scheme.
-bearer_scheme = HTTPBearer(auto_error=False, scheme_name="FirebaseBearer")
+# Supabase Auth access tokens use the standard Bearer authorization scheme.
+# The scheme name is exposed in Swagger/OpenAPI so the Authorize dialog
+# clearly asks for a Supabase JWT rather than a Firebase token.
+bearer_scheme = HTTPBearer(
+    auto_error=False,
+    scheme_name="SupabaseBearer",
+    description="Supabase Auth access token (JWT).",
+)
 
 # Maintenance endpoints use a separate header so Swagger can authorize it
-# independently from Firebase Bearer authentication.
+# independently from Supabase authentication.
 cleanup_token_scheme = APIKeyHeader(
     name="X-Cleanup-Token",
     auto_error=False,
@@ -28,20 +33,57 @@ cleanup_token_scheme = APIKeyHeader(
 
 
 @lru_cache(maxsize=1)
-def _firebase_app():
-    if firebase_admin._apps:
-        return firebase_admin.get_app()
+def _supabase_jwks_client() -> PyJWKClient:
+    url = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+    if not url:
+        raise RuntimeError("SUPABASE_URL is not configured")
+    return PyJWKClient(f"{url}/auth/v1/.well-known/jwks.json")
 
-    raw = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
-    if not raw:
-        raise RuntimeError("FIREBASE_SERVICE_ACCOUNT_JSON is not configured")
 
+def _verify_supabase_jwt(token: str) -> Dict[str, Any]:
+    """Verify a Supabase Auth access token.
+
+    Newer Supabase projects use asymmetric signing keys exposed through the
+    project's JWKS endpoint. Older projects using an HS256 JWT secret are
+    supported through SUPABASE_JWT_SECRET when configured.
+    """
     try:
-        service_account = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError("FIREBASE_SERVICE_ACCOUNT_JSON is invalid JSON") from exc
+        header = jwt.get_unverified_header(token)
+        algorithm = header.get("alg")
+        supabase_url = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+        if not supabase_url:
+            raise RuntimeError("SUPABASE_URL is not configured")
 
-    return firebase_admin.initialize_app(credentials.Certificate(service_account))
+        issuer = f"{supabase_url}/auth/v1"
+
+        if algorithm in {"HS256", "HS384", "HS512"}:
+            secret = os.getenv("SUPABASE_JWT_SECRET", "").strip()
+            if not secret:
+                raise RuntimeError(
+                    "SUPABASE_JWT_SECRET is required for HS256 Supabase tokens"
+                )
+            return jwt.decode(
+                token,
+                secret,
+                algorithms=[algorithm],
+                audience="authenticated",
+                issuer=issuer,
+            )
+
+        signing_key = _supabase_jwks_client().get_signing_key_from_jwt(token)
+        return jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=[algorithm] if algorithm else ["ES256", "RS256"],
+            audience="authenticated",
+            issuer=issuer,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired Supabase authentication token",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
 
 
 def verify_bearer_token(
@@ -54,21 +96,17 @@ def verify_bearer_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    try:
-        return auth.verify_id_token(credentials.credentials, app=_firebase_app())
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired authentication token",
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from exc
+    return _verify_supabase_jwt(credentials.credentials)
 
 
 def get_current_user(
     token: Dict[str, Any] = Depends(verify_bearer_token),
     db: Session = Depends(get_db),
 ) -> User:
-    uid = token.get("uid")
+    # Supabase Auth uses `sub` as the authenticated user's UUID. The existing
+    # database column remains named firebase_uid for backwards compatibility;
+    # it now stores the Supabase user UUID instead.
+    uid = token.get("sub")
     if not uid:
         raise HTTPException(status_code=401, detail="Invalid authentication token")
 
@@ -82,10 +120,10 @@ def get_current_user(
 def require_admin(
     token: Dict[str, Any] = Depends(verify_bearer_token),
 ) -> Dict[str, Any]:
-    uid = token.get("uid")
+    uid = token.get("sub")
     admins = {
         value.strip()
-        for value in os.getenv("ADMIN_FIREBASE_UIDS", "").split(",")
+        for value in os.getenv("ADMIN_SUPABASE_UIDS", "").split(",")
         if value.strip()
     }
     if not uid or uid not in admins:
@@ -96,12 +134,7 @@ def require_admin(
 def require_cleanup_token(
     token: str | None = Depends(cleanup_token_scheme),
 ) -> None:
-    """Protect maintenance endpoints with the dedicated CLEANUP_TOKEN secret.
-
-    The cleanup secret intentionally uses X-Cleanup-Token rather than the
-    Firebase Bearer scheme. This keeps Swagger/OpenAPI authorization for
-    normal users separate from the server-side maintenance credential.
-    """
+    """Protect maintenance endpoints with the dedicated CLEANUP_TOKEN secret."""
     expected = os.getenv("CLEANUP_TOKEN", "").strip()
 
     if not expected:
