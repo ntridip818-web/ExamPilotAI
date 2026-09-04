@@ -15,7 +15,9 @@ def create_user(
     token: dict = Depends(verify_bearer_token),
     db: Session = Depends(get_db),
 ):
-    uid = token.get("uid")
+    # Supabase Auth identifies users with the `sub` claim and provides the
+    # verified email in the `email` claim.
+    uid = token.get("sub")
     token_email = (token.get("email") or "").strip().lower()
     email = str(user.email).strip().lower()
 
