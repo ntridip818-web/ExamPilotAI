@@ -193,6 +193,11 @@ function getSavedRecord(examId) {
 }
 
 async function fetchSavedExams() {
+  if (!currentUser?.id) {
+    savedRecords = [];
+    return;
+  }
+
   try {
     const res = await fetch(
       `${API_BASE_URL}/saved-exams/user/${currentUser.id}`,
@@ -211,6 +216,13 @@ async function fetchSavedExams() {
 }
 
 async function saveExam(examId) {
+  if (!currentUser?.id) {
+    document.getElementById("authStatus").textContent =
+      "Please sign in before saving an exam.";
+    document.getElementById("authFields").hidden = false;
+    return false;
+  }
+
   try {
     const res = await fetch(`${API_BASE_URL}/saved-exams/`, {
       method: "POST",
@@ -240,6 +252,8 @@ async function saveExam(examId) {
 }
 
 async function unsaveExam(examId) {
+  if (!currentUser?.id) return false;
+
   const savedRecord = getSavedRecord(examId);
 
   if (!savedRecord) {
