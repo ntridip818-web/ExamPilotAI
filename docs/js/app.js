@@ -8,10 +8,167 @@ const cardTemplate = document.getElementById("examCardTemplate");
 let allExams = [];
 let savedRecords = [];
 let activeTab = "all";
+let currentUser = null;
 
-const USER_ID = Number(
-  localStorage.getItem("exampilotai_user_id") || "2"
-);
+function getSupabase() {
+  return window.examPilotSupabase;
+}
+
+function getAuthHeaders() {
+  return currentUser?.access_token
+    ? { Authorization: `Bearer ${currentUser.access_token}` }
+    : {};
+}
+
+async function ensureBackendUser() {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+
+  const session = await window.getExamPilotSession();
+  if (!session?.user) return null;
+
+  currentUser = {
+    supabaseUser: session.user,
+    access_token: session.access_token,
+    id: null,
+  };
+
+  const res = await fetch(`${API_BASE_URL}/users/me`, {
+    headers: getAuthHeaders(),
+  });
+
+  if (!res.ok) {
+    let detail = "";
+    try {
+      const body = await res.json();
+      detail = body.detail ? `: ${body.detail}` : "";
+    } catch (_) {}
+    throw new Error(`Could not load your ExamPilotAI profile${detail}`);
+  }
+
+  const user = await res.json();
+  currentUser.id = user.id;
+  return currentUser;
+}
+
+async function refreshAuthUI() {
+  const supabase = getSupabase();
+  const title = document.getElementById("authTitle");
+  const status = document.getElementById("authStatus");
+  const fields = document.getElementById("authFields");
+  const logoutBtn = document.getElementById("logoutBtn");
+
+  if (!supabase) {
+    title.textContent = "Supabase setup required";
+    status.textContent = "Add the Publishable key in js/supabase-auth.js.";
+    return;
+  }
+
+  const session = await window.getExamPilotSession();
+
+  if (!session) {
+    currentUser = null;
+    title.textContent = "Sign in to ExamPilotAI";
+    status.textContent = "Sign in to save exams to your account.";
+    fields.hidden = false;
+    logoutBtn.hidden = true;
+    return;
+  }
+
+  try {
+    await ensureBackendUser();
+    title.textContent = session.user.email || "Signed in";
+    status.textContent = "Your saved exams are linked to your account.";
+    fields.hidden = true;
+    logoutBtn.hidden = false;
+  } catch (err) {
+    console.error(err);
+    status.textContent = err.message;
+  }
+}
+
+async function signIn() {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const email = document.getElementById("authEmail").value.trim();
+  const password = document.getElementById("authPassword").value;
+
+  if (!email || !password) {
+    document.getElementById("authStatus").textContent =
+      "Enter your email and password.";
+    return;
+  }
+
+  document.getElementById("authStatus").textContent = "Signing in…";
+
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  if (error) {
+    document.getElementById("authStatus").textContent = error.message;
+    return;
+  }
+
+  await refreshAuthUI();
+  await fetchSavedExams();
+  render();
+}
+
+async function signUp() {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const email = document.getElementById("authEmail").value.trim();
+  const password = document.getElementById("authPassword").value;
+
+  if (!email || !password) {
+    document.getElementById("authStatus").textContent =
+      "Enter your email and password.";
+    return;
+  }
+
+  if (password.length < 6) {
+    document.getElementById("authStatus").textContent =
+      "Password must be at least 6 characters.";
+    return;
+  }
+
+  document.getElementById("authStatus").textContent = "Creating account…";
+
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+  });
+
+  if (error) {
+    document.getElementById("authStatus").textContent = error.message;
+    return;
+  }
+
+  if (!data.session) {
+    document.getElementById("authStatus").textContent =
+      "Account created. Check your email to confirm your address, then sign in.";
+    return;
+  }
+
+  await refreshAuthUI();
+  await fetchSavedExams();
+  render();
+}
+
+async function signOut() {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  await supabase.auth.signOut();
+  currentUser = null;
+  savedRecords = [];
+  await refreshAuthUI();
+  render();
+}
 
 function getSavedIds() {
   return savedRecords.map(record => record.exam?.id).filter(Boolean);
@@ -24,9 +181,15 @@ function getSavedRecord(examId) {
 }
 
 async function fetchSavedExams() {
+  if (!currentUser?.id) {
+    savedRecords = [];
+    return;
+  }
+
   try {
     const res = await fetch(
-      `${API_BASE_URL}/saved-exams/user/${USER_ID}`
+      `${API_BASE_URL}/saved-exams/user/${currentUser.id}`,
+      { headers: getAuthHeaders() }
     );
 
     if (!res.ok) {
@@ -41,14 +204,22 @@ async function fetchSavedExams() {
 }
 
 async function saveExam(examId) {
+  if (!currentUser?.id) {
+    document.getElementById("authStatus").textContent =
+      "Please sign in before saving an exam.";
+    document.getElementById("authFields").hidden = false;
+    return false;
+  }
+
   try {
     const res = await fetch(`${API_BASE_URL}/saved-exams/`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        ...getAuthHeaders()
       },
       body: JSON.stringify({
-        user_id: USER_ID,
+        user_id: currentUser.id,
         exam_id: examId
       })
     });
@@ -69,6 +240,8 @@ async function saveExam(examId) {
 }
 
 async function unsaveExam(examId) {
+  if (!currentUser?.id) return false;
+
   const savedRecord = getSavedRecord(examId);
 
   if (!savedRecord) {
@@ -79,7 +252,8 @@ async function unsaveExam(examId) {
     const res = await fetch(
       `${API_BASE_URL}/saved-exams/${savedRecord.id}`,
       {
-        method: "DELETE"
+        method: "DELETE",
+        headers: getAuthHeaders()
       }
     );
 
@@ -99,6 +273,14 @@ async function unsaveExam(examId) {
 }
 
 async function toggleSaved(examId) {
+  if (!currentUser?.id) {
+    document.getElementById("authStatus").textContent =
+      "Please sign in before saving an exam.";
+    document.getElementById("authFields").hidden = false;
+    document.getElementById("authEmail").focus();
+    return false;
+  }
+
   const isSaved = getSavedIds().includes(examId);
 
   if (isSaved) {
@@ -128,7 +310,11 @@ async function fetchExams() {
 
     allExams = await res.json();
 
-    await fetchSavedExams();
+    if (currentUser?.id) {
+      await fetchSavedExams();
+    } else {
+      savedRecords = [];
+    }
 
   } catch (err) {
     console.error("Could not load exams:", err);
@@ -403,7 +589,7 @@ document
         const tab =
           el.dataset.tab;
 
-        if (tab === "saved") {
+        if (tab === "saved" && currentUser?.id) {
           await fetchSavedExams();
         }
 
@@ -441,7 +627,23 @@ document
     fetchExams
   );
 
-fetchExams();
+document.getElementById("loginBtn").addEventListener("click", signIn);
+document.getElementById("signupBtn").addEventListener("click", signUp);
+document.getElementById("logoutBtn").addEventListener("click", signOut);
+
+(async function initAuth() {
+  const supabase = getSupabase();
+
+  if (supabase) {
+    supabase.auth.onAuthStateChange(async () => {
+      await refreshAuthUI();
+      await fetchExams();
+    });
+  }
+
+  await refreshAuthUI();
+  await fetchExams();
+})();
 
 if ("serviceWorker" in navigator) {
 

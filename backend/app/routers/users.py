@@ -46,6 +46,38 @@ def create_user(
     return db_user
 
 
+@router.get("/me", response_model=UserOut)
+def get_my_profile(
+    token: dict = Depends(verify_bearer_token),
+    db: Session = Depends(get_db),
+):
+    """Return the authenticated profile, creating the local profile on first login."""
+    uid = token.get("sub")
+    email = (token.get("email") or "").strip().lower()
+
+    if not uid or not email:
+        raise HTTPException(status_code=401, detail="Invalid authentication token")
+
+    user = db.query(User).filter(User.firebase_uid == uid).first()
+    if user:
+        return user
+
+    user = db.query(User).filter(User.email == email).first()
+    if user:
+        if user.firebase_uid and user.firebase_uid != uid:
+            raise HTTPException(status_code=409, detail="Email is already linked to another account")
+        user.firebase_uid = uid
+        db.commit()
+        db.refresh(user)
+        return user
+
+    user = User(email=email, firebase_uid=uid)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 @router.get("/{user_id}", response_model=UserOut)
 def get_user(
     user_id: int,
