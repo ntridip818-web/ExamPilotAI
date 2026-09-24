@@ -33,29 +33,17 @@ async function ensureBackendUser() {
     id: null,
   };
 
-  const headers = {
-    ...getAuthHeaders(),
-    "Content-Type": "application/json",
-  };
-
-  let res = await fetch(`${API_BASE_URL}/users/`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ email: session.user.email }),
-  });
-
-  if (res.ok) {
-    const user = await res.json();
-    currentUser.id = user.id;
-    return currentUser;
-  }
-
-  res = await fetch(`${API_BASE_URL}/users/me`, {
+  const res = await fetch(`${API_BASE_URL}/users/me`, {
     headers: getAuthHeaders(),
   });
 
   if (!res.ok) {
-    throw new Error("Could not load your ExamPilotAI profile");
+    let detail = "";
+    try {
+      const body = await res.json();
+      detail = body.detail ? `: ${body.detail}` : "";
+    } catch (_) {}
+    throw new Error(`Could not load your ExamPilotAI profile${detail}`);
   }
 
   const user = await res.json();
