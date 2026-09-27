@@ -159,6 +159,33 @@ async function signUp() {
   render();
 }
 
+async function requestPasswordReset() {
+  const supabase = getSupabase();
+  const email = document.getElementById("authEmail").value.trim();
+  const status = document.getElementById("authStatus");
+  if (!email) { status.textContent = "Enter your email address first."; return; }
+  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + window.location.pathname });
+  status.textContent = error ? error.message : "Password reset email sent. Check your inbox.";
+}
+
+async function updatePassword() {
+  const supabase = getSupabase();
+  const password = document.getElementById("newPassword").value;
+  const confirm = document.getElementById("newPasswordConfirm").value;
+  const status = document.getElementById("authStatus");
+  if (password.length < 6) { status.textContent = "Password must be at least 6 characters."; return; }
+  if (password !== confirm) { status.textContent = "Passwords do not match."; return; }
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) { status.textContent = error.message; return; }
+  document.getElementById("passwordResetPanel").hidden = true;
+  document.getElementById("authFields").hidden = false;
+  window.history.replaceState({}, document.title, window.location.pathname);
+  await supabase.auth.signOut();
+  currentUser = null;
+  status.textContent = "Password updated successfully. You can now sign in.";
+}
+
+
 async function signOut() {
   const supabase = getSupabase();
   if (!supabase) return;
@@ -630,9 +657,17 @@ document
 document.getElementById("loginBtn").addEventListener("click", signIn);
 document.getElementById("signupBtn").addEventListener("click", signUp);
 document.getElementById("logoutBtn").addEventListener("click", signOut);
+document.getElementById("forgotPasswordBtn").addEventListener("click", requestPasswordReset);
+document.getElementById("updatePasswordBtn").addEventListener("click", updatePassword);
 
 (async function initAuth() {
   const supabase = getSupabase();
+
+  if (supabase && new URLSearchParams(window.location.hash.substring(1)).get("type") === "recovery") {
+    document.getElementById("passwordResetPanel").hidden = false;
+    document.getElementById("authFields").hidden = true;
+    document.getElementById("logoutBtn").hidden = true;
+  }
 
   if (supabase) {
     supabase.auth.onAuthStateChange(async () => {
