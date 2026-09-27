@@ -159,6 +159,93 @@ async function signUp() {
   render();
 }
 
+async function requestPasswordReset() {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const email = document.getElementById("authEmail").value.trim();
+  const status = document.getElementById("authStatus");
+
+  if (!email) {
+    status.textContent = "Enter your email address first.";
+    document.getElementById("authEmail").focus();
+    return;
+  }
+
+  status.textContent = "Sending password reset email…";
+
+  const redirectTo = window.location.origin + window.location.pathname;
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo
+  });
+
+  if (error) {
+    status.textContent = error.message;
+    return;
+  }
+
+  status.textContent = "Password reset email sent. Check your inbox.";
+}
+
+function showPasswordResetPanel() {
+  const panel = document.getElementById("passwordResetPanel");
+  const fields = document.getElementById("authFields");
+  const logoutBtn = document.getElementById("logoutBtn");
+
+  if (panel) panel.hidden = false;
+  if (fields) fields.hidden = true;
+  if (logoutBtn) logoutBtn.hidden = true;
+  document.getElementById("authTitle").textContent = "Reset your password";
+  document.getElementById("authStatus").textContent =
+    "Enter and confirm your new password.";
+}
+
+async function updatePassword() {
+  const supabase = getSupabase();
+  const password = document.getElementById("newPassword").value;
+  const confirm = document.getElementById("newPasswordConfirm").value;
+  const status = document.getElementById("authStatus");
+
+  if (!password || password.length < 6) {
+    status.textContent = "Password must be at least 6 characters.";
+    return;
+  }
+
+  if (password !== confirm) {
+    status.textContent = "Passwords do not match.";
+    return;
+  }
+
+  status.textContent = "Updating password…";
+  const { error } = await supabase.auth.updateUser({ password });
+
+  if (error) {
+    status.textContent = error.message;
+    return;
+  }
+
+  document.getElementById("newPassword").value = "";
+  document.getElementById("newPasswordConfirm").value = "";
+  document.getElementById("passwordResetPanel").hidden = true;
+  window.history.replaceState({}, document.title, window.location.pathname);
+  await supabase.auth.signOut();
+  currentUser = null;
+  document.getElementById("authFields").hidden = false;
+  document.getElementById("logoutBtn").hidden = true;
+  document.getElementById("authTitle").textContent = "Sign in to ExamPilotAI";
+  status.textContent = "Password updated successfully. You can now sign in.";
+}
+
+function cancelPasswordReset() {
+  const panel = document.getElementById("passwordResetPanel");
+  if (panel) panel.hidden = true;
+  window.history.replaceState({}, document.title, window.location.pathname);
+  document.getElementById("authFields").hidden = false;
+  document.getElementById("authTitle").textContent = "Sign in to ExamPilotAI";
+  document.getElementById("authStatus").textContent =
+    "Sign in to save exams to your account.";
+}
+
 async function signOut() {
   const supabase = getSupabase();
   if (!supabase) return;
@@ -630,9 +717,16 @@ document
 document.getElementById("loginBtn").addEventListener("click", signIn);
 document.getElementById("signupBtn").addEventListener("click", signUp);
 document.getElementById("logoutBtn").addEventListener("click", signOut);
+document.getElementById("forgotPasswordBtn").addEventListener("click", requestPasswordReset);
+document.getElementById("updatePasswordBtn").addEventListener("click", updatePassword);
+document.getElementById("cancelPasswordResetBtn").addEventListener("click", cancelPasswordReset);
 
 (async function initAuth() {
   const supabase = getSupabase();
+
+  if (supabase && new URLSearchParams(window.location.hash.substring(1)).get("type") === "recovery") {
+    showPasswordResetPanel();
+  }
 
   if (supabase) {
     supabase.auth.onAuthStateChange(async () => {
