@@ -94,8 +94,16 @@
         <button type="button" id="loginBtn">Sign in</button>
         <button type="button" id="signupBtn">Sign up</button>
       </div>
+      <button type="button" id="forgotPasswordBtn" class="auth-link">Forgot password?</button>
     </div>
     <button type="button" id="logoutBtn" hidden>Sign out</button>
+    <div class="password-reset" id="passwordResetPanel" hidden>
+      <strong>Set a new password</strong>
+      <input id="newPassword" type="password" autocomplete="new-password" placeholder="New password">
+      <input id="newPasswordConfirm" type="password" autocomplete="new-password" placeholder="Confirm new password">
+      <button type="button" id="updatePasswordBtn">Update password</button>
+      <button type="button" id="cancelPasswordResetBtn">Cancel</button>
+    </div>
   </div>
 </section>
 
