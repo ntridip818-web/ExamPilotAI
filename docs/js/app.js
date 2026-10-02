@@ -270,11 +270,37 @@ function getSavedRecord(examId) {
 }
 
 
+function getReminderStorageKey() {
+  return currentUser?.id ? `exampilotai:reminders:${currentUser.id}` : null;
+}
+
+function loadCachedReminders() {
+  const key = getReminderStorageKey();
+  if (!key) return [];
+  try {
+    const cached = JSON.parse(localStorage.getItem(key) || "[]");
+    return Array.isArray(cached) ? cached : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function cacheReminders() {
+  const key = getReminderStorageKey();
+  if (!key) return;
+  try {
+    localStorage.setItem(key, JSON.stringify(reminderRecords));
+  } catch (_) {}
+}
+
 async function fetchReminders() {
   if (!currentUser?.id) {
     reminderRecords = [];
     return;
   }
+
+  // Show the last known reminder immediately while the API request runs.
+  reminderRecords = loadCachedReminders();
 
   try {
     let res = await fetch(
@@ -301,6 +327,7 @@ async function fetchReminders() {
 
     const records = await res.json();
     reminderRecords = Array.isArray(records) ? records : [];
+    cacheReminders();
   } catch (err) {
     console.error("Could not load reminders:", err);
     // Keep already-loaded reminders during a temporary background failure.
@@ -385,6 +412,7 @@ async function saveReminder() {
       return;
     }
     reminderRecords = reminderRecords.filter(r => r.id !== existing.id);
+    cacheReminders();
   }
 
   const res = await fetch(`${API_BASE_URL}/reminders/`, {
@@ -412,7 +440,9 @@ async function saveReminder() {
   }
 
   const record = await res.json();
+  reminderRecords = reminderRecords.filter(r => Number(r.exam_id) !== Number(reminderExam.id));
   reminderRecords.push(record);
+  cacheReminders();
   closeReminderModal();
   render();
 }
