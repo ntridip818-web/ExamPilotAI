@@ -7,7 +7,9 @@ const cardTemplate = document.getElementById("examCardTemplate");
 
 let allExams = [];
 let savedRecords = [];
+let reminderRecords = [];
 let activeTab = "all";
+let reminderExam = null;
 let currentUser = null;
 
 function getSupabase() {
@@ -114,6 +116,7 @@ async function signIn() {
 
   await refreshAuthUI();
   await fetchSavedExams();
+      await fetchReminders();
   render();
 }
 
@@ -207,6 +210,35 @@ function getSavedRecord(examId) {
   );
 }
 
+
+async function fetchReminders() {
+  if (!currentUser?.id) { reminderRecords=[]; return; }
+  try { const res=await fetch(`${API_BASE_URL}/reminders/user/${currentUser.id}`,{headers:getAuthHeaders()}); if(!res.ok) throw new Error(); reminderRecords=await res.json(); }
+  catch(e){ console.error("Could not load reminders",e); reminderRecords=[]; }
+}
+function getReminderForExam(id){return reminderRecords.find(r=>Number(r.exam_id)===Number(id));}
+function openReminderModal(exam){
+  if(!currentUser?.id){document.getElementById("authStatus").textContent="Please sign in before setting a reminder.";return;}
+  reminderExam=exam; const existing=getReminderForExam(exam.id);
+  document.getElementById("reminderExamTitle").textContent=exam.title;
+  document.getElementById("reminderType").value=existing?.reminder_type||"application_deadline";
+  const d=existing?new Date(existing.remind_at):new Date(Date.now()+3600000),p=v=>String(v).padStart(2,"0");
+  document.getElementById("reminderAt").value=`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  document.getElementById("reminderStatus").textContent="";
+  document.getElementById("reminderModal").hidden=false;
+}
+function closeReminderModal(){document.getElementById("reminderModal").hidden=true;reminderExam=null;}
+async function saveReminder(){
+  if(!currentUser?.id||!reminderExam)return;
+  const input=document.getElementById("reminderAt").value,status=document.getElementById("reminderStatus");
+  const d=new Date(input); if(!input||Number.isNaN(d.getTime())||d.getTime()<=Date.now()){status.textContent="Choose a future date and time.";return;}
+  status.textContent="Saving reminder…";
+  const old=getReminderForExam(reminderExam.id);
+  if(old){const dr=await fetch(`${API_BASE_URL}/reminders/${old.id}`,{method:"DELETE",headers:getAuthHeaders()});if(!dr.ok){status.textContent="Could not replace the existing reminder.";return;}}
+  const res=await fetch(`${API_BASE_URL}/reminders/`,{method:"POST",headers:{"Content-Type":"application/json",...getAuthHeaders()},body:JSON.stringify({user_id:currentUser.id,exam_id:reminderExam.id,reminder_type:document.getElementById("reminderType").value,remind_at:d.toISOString()})});
+  if(!res.ok){status.textContent="Could not save reminder.";return;}
+  reminderRecords=reminderRecords.filter(r=>r.id!==old?.id);reminderRecords.push(await res.json());closeReminderModal();render();
+}
 async function fetchSavedExams() {
   if (!currentUser?.id) {
     savedRecords = [];
@@ -521,6 +553,9 @@ function render() {
 
     const saveBtn =
       node.querySelector(".btn-save");
+    const reminderBtn=node.querySelector(".btn-reminder");
+    if(getReminderForExam(exam.id)){reminderBtn.textContent="Reminder set";reminderBtn.classList.add("is-set");}
+    reminderBtn.addEventListener("click",()=>openReminderModal(exam));
 
     const saveLabel =
       node.querySelector(".save-label");
@@ -692,3 +727,5 @@ if ("serviceWorker" in navigator) {
     }
   );
       }
+
+document.addEventListener("DOMContentLoaded",()=>{document.getElementById("saveReminderBtn")?.addEventListener("click",saveReminder);document.getElementById("cancelReminderBtn")?.addEventListener("click",closeReminderModal);document.getElementById("reminderCloseBtn")?.addEventListener("click",closeReminderModal);});

@@ -157,10 +157,13 @@
         </svg>
         <span class="save-label">Save</span>
       </button>
+      <button class="btn-reminder" type="button">Set Reminder</button>
     </div>
   </article>
 </template>
 
+
+<div class="reminder-modal" id="reminderModal" hidden><div class="reminder-dialog" role="dialog" aria-modal="true"><button class="reminder-close" id="reminderCloseBtn" type="button">×</button><p class="reminder-kicker">REMINDER</p><h3>Set a reminder</h3><p id="reminderExamTitle"></p><label><span>Reminder type</span><select id="reminderType"><option value="application_deadline">Application deadline</option><option value="admit_card">Admit card</option><option value="exam_day">Exam day</option><option value="result">Result</option></select></label><label><span>Remind me at</span><input id="reminderAt" type="datetime-local"></label><p class="reminder-status" id="reminderStatus"></p><div class="reminder-actions"><button type="button" id="saveReminderBtn">Save reminder</button><button type="button" id="cancelReminderBtn">Cancel</button></div></div></div>
 <nav class="bottom-nav">
   <button class="bnav-item is-active" data-tab="all">
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 8.5 10 3l7 5.5V17a1 1 0 0 1-1 1h-3v-5H7v5H4a1 1 0 0 1-1-1V8.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
