@@ -7,7 +7,9 @@ const cardTemplate = document.getElementById("examCardTemplate");
 
 let allExams = [];
 let savedRecords = [];
+let reminderRecords = [];
 let activeTab = "all";
+let reminderExam = null;
 let currentUser = null;
 
 function getSupabase() {
@@ -267,6 +269,137 @@ function getSavedRecord(examId) {
   );
 }
 
+
+async function fetchReminders() {
+  if (!currentUser?.id) {
+    reminderRecords = [];
+    return;
+  }
+
+  try {
+    const res = await fetch(
+      `${API_BASE_URL}/reminders/user/${currentUser.id}`,
+      { headers: getAuthHeaders() }
+    );
+
+    if (!res.ok) throw new Error("Could not load reminders");
+    reminderRecords = await res.json();
+  } catch (err) {
+    console.error("Could not load reminders:", err);
+    reminderRecords = [];
+  }
+}
+
+function getReminderForExam(examId) {
+  return reminderRecords.find(
+    record => Number(record.exam_id) === Number(examId)
+  );
+}
+
+function toLocalDateTimeInput(date) {
+  const d = new Date(date);
+  const pad = value => String(value).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function openReminderModal(exam) {
+  if (!currentUser?.id) {
+    document.getElementById("authStatus").textContent =
+      "Please sign in before setting a reminder.";
+    document.getElementById("authFields").hidden = false;
+    document.getElementById("authEmail").focus();
+    return;
+  }
+
+  reminderExam = exam;
+  const existing = getReminderForExam(exam.id);
+  const modal = document.getElementById("reminderModal");
+
+  document.getElementById("reminderExamTitle").textContent = exam.title;
+  document.getElementById("reminderType").value =
+    existing?.reminder_type || "application_deadline";
+
+  const defaultTime = existing
+    ? new Date(existing.remind_at)
+    : new Date(Date.now() + 60 * 60 * 1000);
+
+  document.getElementById("reminderAt").value =
+    toLocalDateTimeInput(defaultTime);
+  document.getElementById("reminderStatus").textContent =
+    existing ? "A reminder is already set. Saving will replace it." : "";
+
+  modal.hidden = false;
+}
+
+function closeReminderModal() {
+  document.getElementById("reminderModal").hidden = true;
+  document.getElementById("reminderStatus").textContent = "";
+  reminderExam = null;
+}
+
+async function saveReminder() {
+  if (!currentUser?.id || !reminderExam) return;
+
+  const type = document.getElementById("reminderType").value;
+  const input = document.getElementById("reminderAt").value;
+  const status = document.getElementById("reminderStatus");
+
+  if (!input) {
+    status.textContent = "Choose a reminder date and time.";
+    return;
+  }
+
+  const remindAt = new Date(input);
+  if (Number.isNaN(remindAt.getTime()) || remindAt.getTime() <= Date.now()) {
+    status.textContent = "Choose a future date and time.";
+    return;
+  }
+
+  status.textContent = "Saving reminder…";
+
+  const existing = getReminderForExam(reminderExam.id);
+  if (existing) {
+    const deleteRes = await fetch(
+      `${API_BASE_URL}/reminders/${existing.id}`,
+      { method: "DELETE", headers: getAuthHeaders() }
+    );
+    if (!deleteRes.ok) {
+      status.textContent = "Could not replace the existing reminder.";
+      return;
+    }
+    reminderRecords = reminderRecords.filter(r => r.id !== existing.id);
+  }
+
+  const res = await fetch(`${API_BASE_URL}/reminders/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...getAuthHeaders()
+    },
+    body: JSON.stringify({
+      user_id: currentUser.id,
+      exam_id: reminderExam.id,
+      reminder_type: type,
+      remind_at: remindAt.toISOString()
+    })
+  });
+
+  if (!res.ok) {
+    let detail = "Could not save reminder.";
+    try {
+      const body = await res.json();
+      if (body.detail) detail = body.detail;
+    } catch (_) {}
+    status.textContent = detail;
+    return;
+  }
+
+  const record = await res.json();
+  reminderRecords.push(record);
+  closeReminderModal();
+  render();
+}
+
 async function fetchSavedExams() {
   if (!currentUser?.id) {
     savedRecords = [];
@@ -399,8 +532,10 @@ async function fetchExams() {
 
     if (currentUser?.id) {
       await fetchSavedExams();
+      await fetchReminders();
     } else {
       savedRecords = [];
+      reminderRecords = [];
     }
 
   } catch (err) {
@@ -582,6 +717,17 @@ function render() {
     const saveBtn =
       node.querySelector(".btn-save");
 
+    const reminderBtn =
+      node.querySelector(".btn-reminder");
+
+    const existingReminder = getReminderForExam(exam.id);
+    if (existingReminder) {
+      reminderBtn.textContent = "Reminder set";
+      reminderBtn.classList.add("is-set");
+    }
+
+    reminderBtn.addEventListener("click", () => openReminderModal(exam));
+
     const saveLabel =
       node.querySelector(".save-label");
 
@@ -720,6 +866,9 @@ document.getElementById("logoutBtn").addEventListener("click", signOut);
 document.getElementById("forgotPasswordBtn").addEventListener("click", requestPasswordReset);
 document.getElementById("updatePasswordBtn").addEventListener("click", updatePassword);
 document.getElementById("cancelPasswordResetBtn").addEventListener("click", cancelPasswordReset);
+document.getElementById("saveReminderBtn").addEventListener("click", saveReminder);
+document.getElementById("cancelReminderBtn").addEventListener("click", closeReminderModal);
+document.getElementById("reminderCloseBtn").addEventListener("click", closeReminderModal);
 
 (async function initAuth() {
   const supabase = getSupabase();

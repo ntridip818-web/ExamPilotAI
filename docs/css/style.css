@@ -316,3 +316,137 @@ button, select { font-family: inherit; }
     flex: 1;
   }
 }
+
+
+.notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.btn-reminder {
+  border: 1px solid rgba(27, 42, 74, 0.2);
+  background: var(--paper);
+  color: var(--ink);
+  border-radius: 7px;
+  padding: 7px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.btn-reminder.is-set {
+  border-color: var(--seal-green);
+  color: var(--seal-green);
+  background: rgba(47, 107, 79, 0.06);
+}
+
+.reminder-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(27, 42, 74, 0.45);
+}
+
+.reminder-modal[hidden] {
+  display: none;
+}
+
+.reminder-dialog {
+  width: min(100%, 420px);
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  padding: 20px;
+  position: relative;
+  box-shadow: 0 12px 36px rgba(27, 42, 74, 0.18);
+}
+
+.reminder-dialog h3 {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 22px;
+}
+
+.reminder-dialog > p:not(.reminder-kicker):not(.reminder-status) {
+  margin: 0 0 16px;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.reminder-kicker {
+  margin: 0 0 4px;
+  color: var(--saffron);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.reminder-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.reminder-dialog label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.reminder-dialog select,
+.reminder-dialog input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid rgba(27, 42, 74, 0.2);
+  border-radius: 7px;
+  font: inherit;
+  color: var(--ink);
+  background: #fff;
+}
+
+.reminder-status {
+  min-height: 18px;
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--stamp-red);
+}
+
+.reminder-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.reminder-actions button {
+  flex: 1;
+  border: 0;
+  border-radius: 7px;
+  padding: 10px 12px;
+  cursor: pointer;
+  font: inherit;
+}
+
+#saveReminderBtn {
+  background: var(--ink);
+  color: #fff;
+}
+
+#cancelReminderBtn {
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+}
