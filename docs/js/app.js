@@ -277,16 +277,33 @@ async function fetchReminders() {
   }
 
   try {
-    const res = await fetch(
+    let res = await fetch(
       `${API_BASE_URL}/reminders/user/${currentUser.id}`,
       { headers: getAuthHeaders() }
     );
 
-    if (!res.ok) throw new Error("Could not load reminders");
-    reminderRecords = await res.json();
+    // Retry once with the latest Supabase access token if the first request
+    // is rejected during a session refresh.
+    if (res.status === 401) {
+      const session = await window.getExamPilotSession();
+      if (session?.user && session.access_token) {
+        currentUser.access_token = session.access_token;
+        res = await fetch(
+          `${API_BASE_URL}/reminders/user/${currentUser.id}`,
+          { headers: getAuthHeaders() }
+        );
+      }
+    }
+
+    if (!res.ok) {
+      throw new Error("Could not load reminders (HTTP " + res.status + ")");
+    }
+
+    const records = await res.json();
+    reminderRecords = Array.isArray(records) ? records : [];
   } catch (err) {
     console.error("Could not load reminders:", err);
-    reminderRecords = [];
+    // Keep already-loaded reminders during a temporary background failure.
   }
 }
 
