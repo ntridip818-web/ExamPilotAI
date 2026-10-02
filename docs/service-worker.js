@@ -1,4 +1,4 @@
-const CACHE_NAME = "exampilotai-v2";
+const CACHE_NAME = "exampilotai-v3";
 const ASSETS = [
   "./",
   "./index.html",
@@ -34,6 +34,7 @@ self.addEventListener("fetch", (event) => {
   // are not hidden by an old service-worker cache.
   const url = new URL(event.request.url);
   const isAppAsset =
+    url.pathname === "/" ||
     url.pathname.endsWith("/index.html") ||
     url.pathname.endsWith("/js/app.js") ||
     url.pathname.endsWith("/js/supabase-auth.js") ||
