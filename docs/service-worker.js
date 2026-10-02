@@ -1,4 +1,4 @@
-const CACHE_NAME = "exampilotai-v2";
+const CACHE_NAME = "exampilotai-v3";
 const ASSETS = [
   "./",
   "./index.html",
@@ -30,8 +30,8 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
 
-  // Always prefer the live files for the app so authentication fixes
-  // are not hidden by an old service-worker cache.
+  // Always prefer the live app assets so authentication and reminder
+  // fixes are not hidden by an old service-worker cache.
   const url = new URL(event.request.url);
   const isAppAsset =
     url.pathname.endsWith("/index.html") ||
