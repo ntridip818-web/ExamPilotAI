@@ -116,7 +116,7 @@ async function signIn() {
 
   await refreshAuthUI();
   await fetchSavedExams();
-      await fetchReminders();
+  await fetchReminders();
   render();
 }
 
@@ -371,8 +371,10 @@ async function fetchExams() {
 
     if (currentUser?.id) {
       await fetchSavedExams();
+      await fetchReminders();
     } else {
       savedRecords = [];
+      reminderRecords = [];
     }
 
   } catch (err) {
