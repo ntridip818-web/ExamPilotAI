@@ -340,10 +340,50 @@ function getReminderForExam(examId) {
   );
 }
 
-function toLocalDateTimeInput(date) {
+function toISTDateTimeInput(date) {
   const d = new Date(date);
-  const pad = value => String(value).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  if (Number.isNaN(d.getTime())) return "";
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).formatToParts(d);
+
+  const values = Object.fromEntries(
+    parts
+      .filter(part => part.type !== "literal")
+      .map(part => [part.type, part.value])
+  );
+
+  return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}`;
+}
+
+function parseISTDateTimeInput(value) {
+  const match = /^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2})$/.exec(value);
+  if (!match) return new Date(NaN);
+
+  const [, year, month, day, hour, minute] = match;
+  const utcMillis = Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute)
+  ) - (5 * 60 + 30) * 60 * 1000;
+
+  return new Date(utcMillis);
+}
+
+function getDefaultReminderTime() {
+  // Default to one minute from now, expressed explicitly in IST.
+  // This keeps the form aligned with Indian Standard Time even if the
+  // device/browser timezone is configured differently.
+  return new Date(Date.now() + 60 * 1000);
 }
 
 function openReminderModal(exam) {
@@ -365,10 +405,10 @@ function openReminderModal(exam) {
 
   const defaultTime = existing
     ? new Date(existing.remind_at)
-    : new Date(Date.now() + 60 * 60 * 1000);
+    : getDefaultReminderTime();
 
   document.getElementById("reminderAt").value =
-    toLocalDateTimeInput(defaultTime);
+    toISTDateTimeInput(defaultTime);
   document.getElementById("reminderStatus").textContent =
     existing ? "A reminder is already set. Saving will replace it." : "";
 
@@ -393,7 +433,7 @@ async function saveReminder() {
     return;
   }
 
-  const remindAt = new Date(input);
+  const remindAt = parseISTDateTimeInput(input);
   if (Number.isNaN(remindAt.getTime()) || remindAt.getTime() <= Date.now()) {
     status.textContent = "Choose a future date and time.";
     return;
