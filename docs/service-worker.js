@@ -1,4 +1,4 @@
-const CACHE_NAME = "exampilotai-v4";
+const CACHE_NAME = "exampilotai-v5";
 const ASSETS = [
   "./",
   "./index.html",
