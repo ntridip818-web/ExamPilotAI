@@ -74,8 +74,6 @@ self.addEventListener("push", (event) => {
   const title = data.title || "ExamPilotAI Reminder";
   const options = {
     body: data.body || "You have a scheduled exam reminder.",
-    icon: "./manifest.json",
-    badge: "./manifest.json",
     tag: data.reminder_id ? "exampilotai-reminder-" + data.reminder_id : "exampilotai-reminder",
     data: { url: data.url || "./" },
     renotify: true,
