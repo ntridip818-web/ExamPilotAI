@@ -86,6 +86,23 @@ class ReminderOut(BaseModel):
     reminder_type: ReminderType
     remind_at: datetime
     is_sent: bool
+    push_sent: bool
+
+    class Config:
+        from_attributes = True
+
+
+class PushSubscriptionCreate(BaseModel):
+    endpoint: str
+    subscription: dict
+
+
+class PushSubscriptionOut(BaseModel):
+    id: int
+    endpoint: str
+    subscription: dict
+    created_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True
