@@ -239,7 +239,22 @@ function openReminderModal(exam){
   document.getElementById("reminderStatus").textContent="";
   document.getElementById("reminderModal").hidden=false;
 }
-function closeReminderModal(){document.getElementById("reminderModal").hidden=true;reminderExam=null;}
+function closeReminderModal(){
+  document.getElementById("reminderModal").hidden=true;
+  reminderExam=null;
+}
+async function cancelReminder(){
+  if(!currentUser?.id||!reminderExam)return;
+  const existing=getReminderForExam(reminderExam.id);
+  if(!existing){closeReminderModal();return;}
+  const status=document.getElementById("reminderStatus");
+  status.textContent="Cancelling reminder…";
+  const res=await fetch(`${API_BASE_URL}/reminders/${existing.id}`,{method:"DELETE",headers:getAuthHeaders()});
+  if(!res.ok){status.textContent="Could not cancel reminder.";return;}
+  reminderRecords=reminderRecords.filter(r=>Number(r.id)!==Number(existing.id));
+  closeReminderModal();
+  render();
+}
 async function saveReminder(){
   if(!currentUser?.id||!reminderExam)return;
   const input=document.getElementById("reminderAt").value,status=document.getElementById("reminderStatus");
@@ -742,4 +757,4 @@ if ("serviceWorker" in navigator) {
   );
       }
 
-document.addEventListener("DOMContentLoaded",()=>{document.getElementById("saveReminderBtn")?.addEventListener("click",saveReminder);document.getElementById("cancelReminderBtn")?.addEventListener("click",closeReminderModal);document.getElementById("reminderCloseBtn")?.addEventListener("click",closeReminderModal);});
+document.addEventListener("DOMContentLoaded",()=>{document.getElementById("saveReminderBtn")?.addEventListener("click",saveReminder);document.getElementById("cancelReminderBtn")?.addEventListener("click",cancelReminder);document.getElementById("reminderCloseBtn")?.addEventListener("click",closeReminderModal);});
