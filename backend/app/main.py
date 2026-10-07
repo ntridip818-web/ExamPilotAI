@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import require_cleanup_token
 from app.core.database import Base, engine, get_db
 from app.models.models import Exam, SavedExam, Reminder
-from app.routers import exams, users, saved_exams, reminders
+from app.routers import exams, users, saved_exams, reminders, push_subscriptions
 
 import os
 
@@ -38,6 +38,7 @@ app.include_router(users.router)
 app.include_router(exams.router)
 app.include_router(saved_exams.router)
 app.include_router(reminders.router)
+app.include_router(push_subscriptions.router)
 
 
 @app.get("/")
