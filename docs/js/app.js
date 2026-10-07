@@ -74,6 +74,7 @@ async function refreshAuthUI() {
     status.textContent = "Sign in to save exams to your account.";
     fields.hidden = false;
     logoutBtn.hidden = true;
+    await updatePushButtonState();
     return;
   }
 
@@ -83,6 +84,7 @@ async function refreshAuthUI() {
     status.textContent = "Your saved exams are linked to your account.";
     fields.hidden = true;
     logoutBtn.hidden = false;
+    await updatePushButtonState();
   } catch (err) {
     console.error(err);
     status.textContent = err.message;
@@ -196,8 +198,98 @@ async function signOut() {
   await supabase.auth.signOut();
   currentUser = null;
   savedRecords = [];
+  await updatePushButtonState();
   await refreshAuthUI();
   render();
+}
+
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
+}
+
+async function updatePushButtonState() {
+  const button = document.getElementById("enableNotificationsBtn");
+  if (!button) return;
+  if (!currentUser?.id || !("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+    button.hidden = true;
+    return;
+  }
+  button.hidden = false;
+  if (Notification.permission === "denied") {
+    button.textContent = "Notifications blocked";
+    button.disabled = true;
+    return;
+  }
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+    button.textContent = subscription ? "Notifications enabled" : "Enable notifications";
+    button.disabled = !!subscription;
+  } catch (err) {
+    console.error("Could not check push subscription:", err);
+    button.textContent = "Enable notifications";
+    button.disabled = false;
+  }
+}
+
+async function enablePushNotifications() {
+  const button = document.getElementById("enableNotificationsBtn");
+  const status = document.getElementById("authStatus");
+  if (!currentUser?.id) {
+    status.textContent = "Please sign in before enabling notifications.";
+    return;
+  }
+  if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+    status.textContent = "Push notifications are not supported by this browser.";
+    return;
+  }
+  button.disabled = true;
+  button.textContent = "Enabling…";
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") {
+      status.textContent = permission === "denied"
+        ? "Notifications are blocked for this site. Allow them in browser settings."
+        : "Notification permission was not granted.";
+      await updatePushButtonState();
+      return;
+    }
+    const registration = await navigator.serviceWorker.ready;
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      const keyResponse = await fetch(API_BASE_URL + "/push-subscriptions/public-key");
+      if (!keyResponse.ok) throw new Error("Push notifications are not configured on the server.");
+      const { public_key } = await keyResponse.json();
+      if (!public_key) throw new Error("Push public key is missing.");
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(public_key),
+      });
+    }
+    const saveResponse = await fetch(API_BASE_URL + "/push-subscriptions/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({
+        endpoint: subscription.endpoint,
+        subscription: subscription.toJSON(),
+      }),
+    });
+    if (!saveResponse.ok) throw new Error("Could not register this device for notifications.");
+    status.textContent = "Notifications enabled on this device.";
+    await updatePushButtonState();
+  } catch (err) {
+    console.error("Could not enable push notifications:", err);
+    status.textContent = err.message || "Could not enable notifications.";
+    button.disabled = false;
+    button.textContent = "Enable notifications";
+  }
 }
 
 function getSavedIds() {
@@ -723,6 +815,7 @@ document.getElementById("signupBtn").addEventListener("click", signUp);
 document.getElementById("logoutBtn").addEventListener("click", signOut);
 document.getElementById("forgotPasswordBtn").addEventListener("click", requestPasswordReset);
 document.getElementById("updatePasswordBtn").addEventListener("click", updatePassword);
+document.getElementById("enableNotificationsBtn")?.addEventListener("click", enablePushNotifications);
 
 (async function initAuth() {
   const supabase = getSupabase();
@@ -752,7 +845,8 @@ if ("serviceWorker" in navigator) {
 
       navigator.serviceWorker
         .register("service-worker.js")
-        .catch(() => {});
+        .then(() => updatePushButtonState())
+        .catch((err) => console.error("Service worker registration failed:", err));
     }
   );
       }
