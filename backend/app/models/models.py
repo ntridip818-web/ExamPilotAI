@@ -1,13 +1,6 @@
 from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    Boolean,
-    ForeignKey,
-    DateTime,
-    Text,
-    Enum,
-    UniqueConstraint,
+    Column, Integer, String, Boolean, ForeignKey, DateTime, Text, Enum,
+    UniqueConstraint, JSON,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -37,17 +30,14 @@ class User(Base):
 
     saved_exams = relationship("SavedExam", back_populates="user")
     reminders = relationship("Reminder", back_populates="user")
+    push_subscriptions = relationship("PushSubscription", back_populates="user", cascade="all, delete-orphan")
 
 
 class Exam(Base):
     __tablename__ = "exams"
 
     __table_args__ = (
-        UniqueConstraint(
-            "title",
-            "organization",
-            name="uq_exam_title_organization",
-        ),
+        UniqueConstraint("title", "organization", name="uq_exam_title_organization"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -88,7 +78,21 @@ class Reminder(Base):
     reminder_type = Column(Enum(ReminderType), nullable=False)
     remind_at = Column(DateTime(timezone=True), nullable=False)
     is_sent = Column(Boolean, default=False)
+    push_sent = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="reminders")
     exam = relationship("Exam", back_populates="reminders")
+
+
+class PushSubscription(Base):
+    __tablename__ = "push_subscriptions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    endpoint = Column(Text, nullable=False, unique=True, index=True)
+    subscription = Column(JSON, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    user = relationship("User", back_populates="push_subscriptions")
