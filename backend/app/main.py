@@ -1,3 +1,7 @@
+from contextlib import asynccontextmanager
+import os
+
+from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -5,17 +9,37 @@ from sqlalchemy.orm import Session
 from app.core.auth import require_cleanup_token
 from app.core.database import Base, engine, get_db
 from app.models.models import Exam, SavedExam, Reminder
-from app.routers import exams, users, saved_exams, reminders
-
-import os
-
+from app.routers import exams, users, saved_exams, reminders, push_subscriptions
+from app.services.push_worker import process_due_push_notifications
 
 Base.metadata.create_all(bind=engine)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    scheduler = BackgroundScheduler(timezone="UTC")
+    scheduler.add_job(
+        process_due_push_notifications,
+        "interval",
+        minutes=1,
+        id="exam-pilot-push-reminders",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.start()
+    try:
+        yield
+    finally:
+        scheduler.shutdown(wait=False)
+
+
 
 app = FastAPI(
     title="ExamPilotAI API",
     description="Backend for the ExamPilotAI government exam tracking platform",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 
@@ -38,6 +62,7 @@ app.include_router(users.router)
 app.include_router(exams.router)
 app.include_router(saved_exams.router)
 app.include_router(reminders.router)
+app.include_router(push_subscriptions.router)
 
 
 @app.get("/")
