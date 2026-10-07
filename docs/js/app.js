@@ -216,7 +216,7 @@ async function fetchReminders() {
   try { const res=await fetch(`${API_BASE_URL}/reminders/user/${currentUser.id}`,{headers:getAuthHeaders()}); if(!res.ok) throw new Error(); reminderRecords=await res.json(); }
   catch(e){ console.error("Could not load reminders",e); reminderRecords=[]; }
 }
-function getReminderForExam(id){return reminderRecords.find(r=>Number(r.exam_id)===Number(id));}
+function getReminderForExam(id){return reminderRecords.find(r=>Number(r.exam_id)===Number(id)&&r.is_sent!==true);}
 function toISTDateTimeInput(date){
   const d=new Date(date);
   const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Kolkata",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}).formatToParts(d);
