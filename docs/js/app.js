@@ -217,13 +217,25 @@ async function fetchReminders() {
   catch(e){ console.error("Could not load reminders",e); reminderRecords=[]; }
 }
 function getReminderForExam(id){return reminderRecords.find(r=>Number(r.exam_id)===Number(id));}
+function toISTDateTimeInput(date){
+  const d=new Date(date);
+  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Kolkata",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}).formatToParts(d);
+  const v=Object.fromEntries(parts.filter(p=>p.type!=="literal").map(p=>[p.type,p.value]));
+  return `${v.year}-${v.month}-${v.day}T${v.hour}:${v.minute}`;
+}
+function parseISTDateTimeInput(value){
+  const m=/^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2})$/.exec(value);
+  if(!m)return new Date(NaN);
+  const [,y,mo,da,h,mi]=m;
+  return new Date(Date.UTC(+y,+mo-1,+da,+h,+mi)-(5*60+30)*60*1000);
+}
 function openReminderModal(exam){
   if(!currentUser?.id){document.getElementById("authStatus").textContent="Please sign in before setting a reminder.";return;}
   reminderExam=exam; const existing=getReminderForExam(exam.id);
   document.getElementById("reminderExamTitle").textContent=exam.title;
   document.getElementById("reminderType").value=existing?.reminder_type||"application_deadline";
-  const d=existing?new Date(existing.remind_at):new Date(Date.now()+3600000),p=v=>String(v).padStart(2,"0");
-  document.getElementById("reminderAt").value=`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  const d=existing?new Date(existing.remind_at):new Date(Date.now()+60000);
+  document.getElementById("reminderAt").value=toISTDateTimeInput(d);
   document.getElementById("reminderStatus").textContent="";
   document.getElementById("reminderModal").hidden=false;
 }
@@ -231,7 +243,7 @@ function closeReminderModal(){document.getElementById("reminderModal").hidden=tr
 async function saveReminder(){
   if(!currentUser?.id||!reminderExam)return;
   const input=document.getElementById("reminderAt").value,status=document.getElementById("reminderStatus");
-  const d=new Date(input); if(!input||Number.isNaN(d.getTime())||d.getTime()<=Date.now()){status.textContent="Choose a future date and time.";return;}
+  const d=parseISTDateTimeInput(input); if(!input||Number.isNaN(d.getTime())||d.getTime()<=Date.now()){status.textContent="Choose a future date and time.";return;}
   status.textContent="Saving reminder…";
   const old=getReminderForExam(reminderExam.id);
   if(old){const dr=await fetch(`${API_BASE_URL}/reminders/${old.id}`,{method:"DELETE",headers:getAuthHeaders()});if(!dr.ok){status.textContent="Could not replace the existing reminder.";return;}}
