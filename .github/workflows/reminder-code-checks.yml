@@ -4,18 +4,27 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [automatic-custom-reminders]
+    branches: [automatic-custom-reminders, fix/reminder-push-worker-batch]
 
 jobs:
-  backend-compile:
+  backend-checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Install backend and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt pytest
       - name: Compile Python modules
         run: python -m compileall -q backend/app
+      - name: Run push reminder regression tests
+        env:
+          PYTHONPATH: backend
+          DATABASE_URL: sqlite:///./test_ci.db
+        run: pytest -q backend/tests
   frontend-syntax:
     runs-on: ubuntu-latest
     steps:
