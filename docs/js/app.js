@@ -480,21 +480,17 @@ function openReminderModal(exam) {
   }
 
   reminderExam = exam;
-  const existing = getReminderForExam(exam.id);
   const modal = document.getElementById("reminderModal");
 
   document.getElementById("reminderExamTitle").textContent = exam.title;
-  document.getElementById("reminderType").value =
-    existing?.reminder_type || "application_deadline";
-
-  const defaultTime = existing
-    ? new Date(existing.remind_at)
-    : getDefaultReminderTime();
-
+  document.getElementById("reminderType").value = "application_deadline";
   document.getElementById("reminderAt").value =
-    toISTDateTimeInput(defaultTime);
+    toISTDateTimeInput(getDefaultReminderTime());
+  const existingCount = reminderRecords.filter(
+    record => Number(record.exam_id) === Number(exam.id) && !record.is_sent
+  ).length;
   document.getElementById("reminderStatus").textContent =
-    existing ? "A reminder is already set. Saving will replace it." : "";
+    existingCount ? `${existingCount} reminder(s) already set. This will add another.` : "";
 
   modal.hidden = false;
 }
@@ -525,20 +521,6 @@ async function saveReminder() {
 
   status.textContent = "Saving reminder…";
 
-  const existing = getReminderForExam(reminderExam.id);
-  if (existing) {
-    const deleteRes = await fetch(
-      `${API_BASE_URL}/reminders/${existing.id}`,
-      { method: "DELETE", headers: getAuthHeaders() }
-    );
-    if (!deleteRes.ok) {
-      status.textContent = "Could not replace the existing reminder.";
-      return;
-    }
-    reminderRecords = reminderRecords.filter(r => r.id !== existing.id);
-    cacheReminders();
-  }
-
   const res = await fetch(`${API_BASE_URL}/reminders/`, {
     method: "POST",
     headers: {
@@ -564,11 +546,36 @@ async function saveReminder() {
   }
 
   const record = await res.json();
-  reminderRecords = reminderRecords.filter(r => Number(r.exam_id) !== Number(reminderExam.id));
   reminderRecords.push(record);
   cacheReminders();
   closeReminderModal();
   render();
+}
+
+
+async function createAutomaticDeadlineReminders(exam) {
+  if (!currentUser?.id) {
+    document.getElementById("authStatus").textContent = "Please sign in before setting reminders.";
+    return;
+  }
+  const status = document.getElementById("authStatus");
+  status.textContent = "Creating automatic deadline reminders…";
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/reminders/automatic/${exam.id}`,
+      { method: "POST", headers: getAuthHeaders() }
+    );
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.detail || "Could not create automatic reminders.");
+    await fetchReminders();
+    render();
+    const created = body.created?.length || 0;
+    status.textContent = created
+      ? `Created ${created} automatic reminder(s) for ${exam.title}. Reminders are scheduled for 9:00 AM IST.`
+      : (body.message || "No new future reminders were needed.");
+  } catch (err) {
+    status.textContent = err.message || "Could not create automatic reminders.";
+  }
 }
 
 async function fetchSavedExams() {
@@ -891,13 +898,19 @@ function render() {
     const reminderBtn =
       node.querySelector(".btn-reminder");
 
-    const existingReminder = getReminderForExam(exam.id);
-    if (existingReminder) {
-      reminderBtn.textContent = "Reminder set";
+    const existingReminders = reminderRecords.filter(
+      record => Number(record.exam_id) === Number(exam.id) && !record.is_sent
+    );
+    if (existingReminders.length) {
+      reminderBtn.textContent = `Reminders (${existingReminders.length})`;
       reminderBtn.classList.add("is-set");
     }
 
     reminderBtn.addEventListener("click", () => openReminderModal(exam));
+    const automaticBtn = node.querySelector(".btn-auto-reminder");
+    if (automaticBtn) {
+      automaticBtn.addEventListener("click", () => createAutomaticDeadlineReminders(exam));
+    }
 
     const saveLabel =
       node.querySelector(".save-label");
