@@ -448,7 +448,7 @@ function toISTDateTimeInput(date) {
 }
 
 function parseISTDateTimeInput(value) {
-  const match = /^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2})$/.exec(value);
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
   if (!match) return new Date(NaN);
 
   const [, year, month, day, hour, minute] = match;
@@ -464,10 +464,10 @@ function parseISTDateTimeInput(value) {
 }
 
 function getDefaultReminderTime() {
-  // Default to one minute from now, expressed explicitly in IST.
-  // This keeps the form aligned with Indian Standard Time even if the
-  // device/browser timezone is configured differently.
-  return new Date(Date.now() + 60 * 1000);
+  // Keep a newly created reminder safely in the future so the scheduler
+  // cannot deliver it immediately while the user is still checking the UI.
+  // The value is formatted as IST by toISTDateTimeInput().
+  return new Date(Date.now() + 24 * 60 * 60 * 1000);
 }
 
 function openReminderModal(exam) {
@@ -891,9 +891,19 @@ function render() {
     const reminderBtn =
       node.querySelector(".btn-reminder");
 
-    const existingReminder = getReminderForExam(exam.id);
-    if (existingReminder) {
-      reminderBtn.textContent = "Reminder set";
+    const examReminders = reminderRecords.filter(
+      record => Number(record.exam_id) === Number(exam.id)
+    );
+    const activeReminders = examReminders.filter(record => !record.is_sent);
+    if (activeReminders.length) {
+      reminderBtn.textContent = activeReminders.length === 1
+        ? "Reminder set"
+        : `Reminders (${activeReminders.length})`;
+      reminderBtn.classList.add("is-set");
+    } else if (examReminders.length) {
+      // Keep persisted history visible after delivery instead of making it
+      // look as though saving failed when the page is refreshed.
+      reminderBtn.textContent = "Reminder sent";
       reminderBtn.classList.add("is-set");
     }
 
