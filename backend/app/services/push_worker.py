@@ -3,6 +3,7 @@ import os
 from datetime import datetime, timezone
 
 from pywebpush import WebPushException, webpush
+from sqlalchemy import exists
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
@@ -23,11 +24,18 @@ def process_due_push_notifications():
 
     try:
         now = datetime.now(timezone.utc)
+        # Exclude reminders without any registered device from the batch query.
+        # Otherwise the oldest 50 such reminders could occupy every scheduler run
+        # and prevent deliverable reminders later in the queue from being processed.
+        has_subscription = exists().where(
+            PushSubscription.user_id == Reminder.user_id
+        )
         reminders = (
             db.query(Reminder)
             .filter(
                 Reminder.push_sent.is_(False),
                 Reminder.remind_at <= now,
+                has_subscription,
             )
             .order_by(Reminder.remind_at.asc())
             .limit(50)
@@ -41,9 +49,6 @@ def process_due_push_notifications():
                 .filter(PushSubscription.user_id == reminder.user_id)
                 .all()
             )
-
-            if not subscriptions:
-                continue
 
             delivered = False
             payload = json.dumps({
