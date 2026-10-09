@@ -448,7 +448,7 @@ function toISTDateTimeInput(date) {
 }
 
 function parseISTDateTimeInput(value) {
-  const match = /^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2})$/.exec(value);
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
   if (!match) return new Date(NaN);
 
   const [, year, month, day, hour, minute] = match;
