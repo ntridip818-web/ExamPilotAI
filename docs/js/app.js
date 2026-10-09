@@ -326,7 +326,7 @@ function openReminderModal(exam){
   reminderExam=exam; const existing=getReminderForExam(exam.id);
   document.getElementById("reminderExamTitle").textContent=exam.title;
   document.getElementById("reminderType").value=existing?.reminder_type||"application_deadline";
-  const d=existing?new Date(existing.remind_at):new Date(Date.now()+60000);
+  const d=existing?new Date(existing.remind_at):new Date(Date.now()+24*60*60*1000);
   document.getElementById("reminderAt").value=toISTDateTimeInput(d);
   document.getElementById("reminderStatus").textContent="";
   document.getElementById("reminderModal").hidden=false;
@@ -675,7 +675,15 @@ function render() {
     const saveBtn =
       node.querySelector(".btn-save");
     const reminderBtn=node.querySelector(".btn-reminder");
-    if(getReminderForExam(exam.id)){reminderBtn.textContent="Reminder set";reminderBtn.classList.add("is-set");}
+    const examReminders=reminderRecords.filter(r=>Number(r.exam_id)===Number(exam.id));
+    const activeReminders=examReminders.filter(r=>!r.is_sent);
+    if(activeReminders.length){
+      reminderBtn.textContent=activeReminders.length===1?"Reminder set":`Reminders (${activeReminders.length})`;
+      reminderBtn.classList.add("is-set");
+    } else if(examReminders.length){
+      reminderBtn.textContent="Reminder sent";
+      reminderBtn.classList.add("is-set");
+    }
     reminderBtn.addEventListener("click",()=>openReminderModal(exam));
 
     const saveLabel =
