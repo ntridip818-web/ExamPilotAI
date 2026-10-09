@@ -335,6 +335,31 @@ button, select { font-family: inherit; }
   cursor: pointer;
 }
 
+.btn-auto-reminder {
+  border: 1px solid rgba(47, 107, 79, 0.35);
+  background: rgba(47, 107, 79, 0.08);
+  color: var(--seal-green);
+  border-radius: 7px;
+  padding: 7px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.btn-exam-reminder {
+  border: 1px solid rgba(47, 107, 79, 0.35);
+  background: rgba(47, 107, 79, 0.08);
+  color: var(--seal-green);
+  border-radius: 7px;
+  padding: 7px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.btn-auto-reminder:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
 .btn-reminder.is-set {
   border-color: var(--seal-green);
   color: var(--seal-green);
