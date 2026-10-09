@@ -578,6 +578,31 @@ async function createAutomaticDeadlineReminders(exam) {
   }
 }
 
+
+async function createAutomaticExamDayReminders(exam) {
+  if (!currentUser?.id) {
+    document.getElementById("authStatus").textContent = "Please sign in before setting reminders.";
+    return;
+  }
+  const status = document.getElementById("authStatus");
+  status.textContent = "Creating exam-day reminders…";
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/reminders/automatic-exam/${exam.id}`,
+      { method: "POST", headers: getAuthHeaders() }
+    );
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.detail || "Could not create exam-day reminders.");
+    await fetchReminders();
+    render();
+    status.textContent = body.created?.length
+      ? `Created ${body.created.length} exam-day reminder(s) for ${exam.title}.`
+      : (body.message || "No new future exam-day reminders were needed.");
+  } catch (err) {
+    status.textContent = err.message || "Could not create exam-day reminders.";
+  }
+}
+
 async function fetchSavedExams() {
   if (!currentUser?.id) {
     savedRecords = [];
@@ -910,6 +935,10 @@ function render() {
     const automaticBtn = node.querySelector(".btn-auto-reminder");
     if (automaticBtn) {
       automaticBtn.addEventListener("click", () => createAutomaticDeadlineReminders(exam));
+    }
+    const examDayBtn = node.querySelector(".btn-exam-reminder");
+    if (examDayBtn) {
+      examDayBtn.addEventListener("click", () => createAutomaticExamDayReminders(exam));
     }
 
     const saveLabel =
