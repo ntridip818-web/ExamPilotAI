@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 from app.core.auth import get_current_user
 from app.core.database import get_db
-from app.models.models import Reminder, Exam, User
+from app.models.models import Reminder, ReminderType, Exam, User
 from app.schemas.schemas import ReminderCreate, ReminderOut
 
 router = APIRouter(prefix="/reminders", tags=["reminders"])
