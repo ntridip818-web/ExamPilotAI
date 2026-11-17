@@ -207,3 +207,41 @@ def test_push_endpoint_can_be_updated_by_its_owner(test_app):
     ).one()
     assert record.user_id == user.id
     assert record.subscription == second
+
+
+def test_email_worker_commits_each_success_before_later_send_fails(test_app, monkeypatch):
+    import reminder_worker
+
+    _, db, user, exam, _, _, _ = test_app
+    now = datetime.now(timezone.utc)
+    first = Reminder(
+        user_id=user.id,
+        exam_id=exam.id,
+        reminder_type=ReminderType.APPLICATION_DEADLINE,
+        remind_at=now - timedelta(minutes=2),
+    )
+    second = Reminder(
+        user_id=user.id,
+        exam_id=exam.id,
+        reminder_type=ReminderType.EXAM_DAY,
+        remind_at=now - timedelta(minutes=1),
+    )
+    db.add_all([first, second])
+    db.commit()
+    first_id, second_id = first.id, second.id
+
+    attempts = {"count": 0}
+
+    def send_then_fail(*args, **kwargs):
+        attempts["count"] += 1
+        if attempts["count"] == 2:
+            raise RuntimeError("simulated provider failure")
+
+    monkeypatch.setattr(reminder_worker, "send_email", send_then_fail)
+
+    with pytest.raises(RuntimeError, match="simulated provider failure"):
+        reminder_worker.process_reminders(db)
+
+    db.expire_all()
+    assert db.get(Reminder, first_id).is_sent is True
+    assert db.get(Reminder, second_id).is_sent is False
