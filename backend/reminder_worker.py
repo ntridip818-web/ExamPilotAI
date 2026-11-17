@@ -11,7 +11,7 @@ RESEND_API_URL = "https://api.resend.com/emails"
 MAX_REMINDERS_PER_RUN = 50
 
 
-def send_email(to_email: str, subject: str, html: str) -> None:
+def send_email(to_email: str, subject: str, html: str, idempotency_key: str) -> None:
     api_key = os.getenv("RESEND_API_KEY")
     from_email = os.getenv("REMINDER_FROM_EMAIL")
     if not api_key or not from_email:
@@ -19,7 +19,11 @@ def send_email(to_email: str, subject: str, html: str) -> None:
 
     response = requests.post(
         RESEND_API_URL,
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Idempotency-Key": idempotency_key,
+        },
         json={"from": from_email, "to": [to_email], "subject": subject, "html": html},
         timeout=20,
     )
@@ -56,7 +60,7 @@ def process_reminders(db: Session) -> int:
         )
 
         try:
-            send_email(user.email, subject, html)
+            send_email(user.email, subject, html, f"exampilotai-reminder-{reminder.id}")
             reminder.is_sent = True
             # Persist each successful delivery while its row lock is held.
             # A later email failure cannot roll back earlier sent-state updates.
