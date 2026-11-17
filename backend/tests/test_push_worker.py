@@ -54,6 +54,24 @@ def db_session(monkeypatch):
     engine.dispose()
 
 
+def test_missing_vapid_configuration_skips_without_opening_database(monkeypatch):
+    monkeypatch.delenv("VAPID_PRIVATE_KEY", raising=False)
+    monkeypatch.delenv("VAPID_SUBJECT", raising=False)
+
+    def unexpected_session():
+        raise AssertionError("Database must not be opened when push is unconfigured")
+
+    monkeypatch.setattr(push_worker, "SessionLocal", unexpected_session)
+
+    result = push_worker.process_due_push_notifications()
+
+    assert result == {
+        "processed": 0,
+        "sent": 0,
+        "errors": ["Push notifications are not configured"],
+    }
+
+
 def test_successful_push_marks_push_only(db_session):
     SessionFactory, reminder_id, _, _ = db_session
     with patch.object(push_worker, "webpush") as send:
