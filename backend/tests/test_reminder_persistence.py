@@ -12,6 +12,7 @@ from app.core.auth import get_current_user
 from app.core.database import Base, get_db
 from app.models.models import Exam, PushSubscription, Reminder, ReminderType, User
 from app.routers.reminders import router as reminders_router
+from app.routers.push_subscriptions import router as push_subscriptions_router
 from app.services import push_worker
 
 
@@ -34,7 +35,9 @@ def test_app():
 
     app = FastAPI()
     app.include_router(reminders_router)
-    app.dependency_overrides[get_current_user] = lambda: user
+    app.include_router(push_subscriptions_router)
+    active_user = {"value": user}
+    app.dependency_overrides[get_current_user] = lambda: active_user["value"]
 
     def override_db():
         try:
@@ -44,7 +47,7 @@ def test_app():
 
     app.dependency_overrides[get_db] = override_db
     client = TestClient(app)
-    yield client, db, user, exam, TestingSession, engine
+    yield client, db, user, exam, TestingSession, engine, active_user
     client.close()
     db.close()
     Base.metadata.drop_all(engine)
@@ -141,3 +144,66 @@ def test_automatic_reminder_endpoints_are_idempotent_sequentially(test_app):
         Reminder.user_id == user.id, Reminder.exam_id == exam.id,
         Reminder.reminder_type == ReminderType.EXAM_DAY,
     ).count() == 2
+
+
+
+def test_push_endpoint_cannot_be_reassigned_to_another_user(test_app):
+    client, db, user, _, _, _, active_user = test_app
+    endpoint = "https://push.example.test/shared-endpoint"
+    original_subscription = {
+        "endpoint": endpoint,
+        "keys": {"p256dh": "original-key", "auth": "original-auth"},
+    }
+    created = client.post(
+        "/push-subscriptions/",
+        json={"endpoint": endpoint, "subscription": original_subscription},
+    )
+    assert created.status_code == 200, created.text
+
+    other_user = User(email="other-account@example.com")
+    db.add(other_user)
+    db.commit()
+    db.refresh(other_user)
+    active_user["value"] = other_user
+
+    hijack = client.post(
+        "/push-subscriptions/",
+        json={
+            "endpoint": endpoint,
+            "subscription": {
+                "endpoint": endpoint,
+                "keys": {"p256dh": "attacker-key", "auth": "attacker-auth"},
+            },
+        },
+    )
+    assert hijack.status_code == 409
+
+    record = db.query(PushSubscription).filter(
+        PushSubscription.endpoint == endpoint
+    ).one()
+    assert record.user_id == user.id
+    assert record.subscription == original_subscription
+
+
+def test_push_endpoint_can_be_updated_by_its_owner(test_app):
+    client, db, user, _, _, _, _ = test_app
+    endpoint = "https://push.example.test/owned-endpoint"
+    first = {"endpoint": endpoint, "keys": {"p256dh": "old", "auth": "old"}}
+    second = {"endpoint": endpoint, "keys": {"p256dh": "new", "auth": "new"}}
+
+    created = client.post(
+        "/push-subscriptions/",
+        json={"endpoint": endpoint, "subscription": first},
+    )
+    assert created.status_code == 200, created.text
+
+    updated = client.post(
+        "/push-subscriptions/",
+        json={"endpoint": endpoint, "subscription": second},
+    )
+    assert updated.status_code == 200, updated.text
+    record = db.query(PushSubscription).filter(
+        PushSubscription.endpoint == endpoint
+    ).one()
+    assert record.user_id == user.id
+    assert record.subscription == second
