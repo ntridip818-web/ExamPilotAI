@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from typing import List
 from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -31,8 +32,12 @@ def create_reminder(
         reminder_type=reminder.reminder_type,
         remind_at=reminder.remind_at,
     )
-    db.add(db_reminder)
-    db.commit()
+    try:
+        db.add(db_reminder)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="An identical reminder already exists")
     db.refresh(db_reminder)
     return db_reminder
 
@@ -87,8 +92,15 @@ def create_automatic_deadline_reminders(
             reminder_type=ReminderType.APPLICATION_DEADLINE,
             remind_at=remind_at,
         )
-        db.add(item)
-        created.append({"days_before": days_before, "remind_at": remind_at.isoformat()})
+        try:
+            # The unique index is the final concurrency guard. A savepoint lets
+            # a simultaneous request win without aborting this whole batch.
+            with db.begin_nested():
+                db.add(item)
+                db.flush()
+            created.append({"days_before": days_before, "remind_at": remind_at.isoformat()})
+        except IntegrityError:
+            continue
 
     db.commit()
     return {
@@ -137,13 +149,19 @@ def create_automatic_exam_day_reminders(
         if existing:
             continue
 
-        db.add(Reminder(
+        item = Reminder(
             user_id=current_user.id,
             exam_id=exam_id,
             reminder_type=ReminderType.EXAM_DAY,
             remind_at=remind_at,
-        ))
-        created.append({"days_before": days_before, "remind_at": remind_at.isoformat()})
+        )
+        try:
+            with db.begin_nested():
+                db.add(item)
+                db.flush()
+            created.append({"days_before": days_before, "remind_at": remind_at.isoformat()})
+        except IntegrityError:
+            continue
 
     db.commit()
     return {
