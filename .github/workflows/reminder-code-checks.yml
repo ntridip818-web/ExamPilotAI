@@ -1,0 +1,70 @@
+name: Reminder code checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [automatic-custom-reminders, fix/reminder-push-worker-batch, phase-1-reminder-consolidation]
+
+jobs:
+  backend-checks:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: exampilotai
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d exampilotai"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install backend and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt pytest httpx
+      - name: Compile Python modules
+        env:
+          PYTHONPATH: backend
+        run: python -m compileall -q backend/app backend/migrations backend/tests
+      - name: Upgrade a clean SQLite database
+        env:
+          PYTHONPATH: backend
+          DATABASE_URL: sqlite:///./migration_ci.db
+        run: |
+          cd backend
+          alembic upgrade head
+      - name: Upgrade a clean PostgreSQL database
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/exampilotai
+        run: |
+          cd backend
+          alembic upgrade head
+      - name: Run backend regression tests
+        env:
+          PYTHONPATH: backend
+          DATABASE_URL: sqlite:///./test_ci.db
+        run: pytest -q backend/tests
+      - name: Run PostgreSQL concurrency tests
+        env:
+          PYTHONPATH: backend
+          TEST_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/exampilotai
+        run: pytest -q backend/tests/test_postgres_concurrency.py
+  frontend-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Check app JavaScript syntax
+        run: node --check docs/js/app.js
