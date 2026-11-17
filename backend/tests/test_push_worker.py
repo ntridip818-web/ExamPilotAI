@@ -147,3 +147,56 @@ def test_reminders_without_subscriptions_do_not_starve_subscribed_users(db_sessi
         assert session.get(Reminder, reminder_id).push_sent is True
     finally:
         session.close()
+
+
+
+def test_transient_failure_sets_exponential_retry_backoff(db_session):
+    SessionFactory, reminder_id, _, _ = db_session
+    before = datetime.now(timezone.utc)
+    with patch.object(
+        push_worker,
+        "webpush",
+        side_effect=RuntimeError("temporary network failure"),
+    ):
+        result = push_worker.process_due_push_notifications()
+
+    assert result["sent"] == 0
+    assert result["errors"]
+    session = SessionFactory()
+    try:
+        reminder = session.get(Reminder, reminder_id)
+        assert reminder.push_sent is False
+        assert reminder.push_attempts == 1
+        assert reminder.push_next_attempt_at is not None
+        assert reminder.push_next_attempt_at.replace(tzinfo=timezone.utc) >= before + timedelta(minutes=1)
+        assert "temporary network failure" in reminder.push_last_error
+    finally:
+        session.close()
+
+
+def test_one_successful_device_completes_multi_device_delivery_policy(db_session):
+    SessionFactory, reminder_id, _, user_id = db_session
+    session = SessionFactory()
+    try:
+        session.add(PushSubscription(
+            user_id=user_id,
+            endpoint="https://push.example.test/second",
+            subscription={"endpoint": "https://push.example.test/second", "keys": {"p256dh": "x", "auth": "y"}},
+        ))
+        session.commit()
+    finally:
+        session.close()
+
+    outcomes = [None, RuntimeError("one device unavailable")]
+    with patch.object(push_worker, "webpush", side_effect=outcomes) as send:
+        result = push_worker.process_due_push_notifications()
+
+    assert send.call_count == 2
+    assert result["sent"] == 1
+    session = SessionFactory()
+    try:
+        reminder = session.get(Reminder, reminder_id)
+        assert reminder.push_sent is True
+        assert reminder.push_attempts == 0
+    finally:
+        session.close()
