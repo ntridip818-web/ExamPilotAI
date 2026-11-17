@@ -8,6 +8,7 @@ from app.core.database import SessionLocal
 from app.models.models import Reminder, User, Exam
 
 RESEND_API_URL = "https://api.resend.com/emails"
+MAX_REMINDERS_PER_RUN = 50
 
 
 def send_email(to_email: str, subject: str, html: str) -> None:
@@ -26,22 +27,26 @@ def send_email(to_email: str, subject: str, html: str) -> None:
 
 
 def process_reminders(db: Session) -> int:
-    now = datetime.now(timezone.utc)
-    reminders = (
-        db.query(Reminder, User, Exam)
-        .join(User, Reminder.user_id == User.id)
-        .join(Exam, Reminder.exam_id == Exam.id)
-        .filter(Reminder.is_sent.is_(False), Reminder.remind_at <= now)
-        .order_by(Reminder.remind_at.asc(), Reminder.id.asc())
-        .limit(50)
-        # Claim only the reminder row. Locks remain held through email delivery
-        # and the sent-state commit, so parallel workers skip claimed reminders.
-        .with_for_update(of=Reminder, skip_locked=True)
-        .all()
-    )
-
     sent = 0
-    for reminder, user, exam in reminders:
+    for _ in range(MAX_REMINDERS_PER_RUN):
+        now = datetime.now(timezone.utc)
+        # Claim one row at a time. Committing a batch would release every row
+        # lock before all external sends completed, allowing another worker to
+        # claim later rows if an earlier send failed.
+        item = (
+            db.query(Reminder, User, Exam)
+            .join(User, Reminder.user_id == User.id)
+            .join(Exam, Reminder.exam_id == Exam.id)
+            .filter(Reminder.is_sent.is_(False), Reminder.remind_at <= now)
+            .order_by(Reminder.remind_at.asc(), Reminder.id.asc())
+            .limit(1)
+            .with_for_update(of=Reminder, skip_locked=True)
+            .first()
+        )
+        if item is None:
+            break
+
+        reminder, user, exam = item
         subject = f"ExamPilotAI reminder: {exam.title}"
         html = (
             f"<p>This is your ExamPilotAI reminder.</p>"
@@ -49,12 +54,18 @@ def process_reminders(db: Session) -> int:
             f"<p>Reminder type: {reminder.reminder_type.value}</p>"
             f"<p>Scheduled time: {reminder.remind_at.isoformat()}</p>"
         )
-        send_email(user.email, subject, html)
-        reminder.is_sent = True
-        sent += 1
 
-    if sent:
-        db.commit()
+        try:
+            send_email(user.email, subject, html)
+            reminder.is_sent = True
+            # Persist each successful delivery while its row lock is held.
+            # A later email failure cannot roll back earlier sent-state updates.
+            db.commit()
+            sent += 1
+        except Exception:
+            db.rollback()
+            raise
+
     return sent
 
 
