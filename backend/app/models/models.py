@@ -1,6 +1,6 @@
 from sqlalchemy import (
     Column, Integer, String, Boolean, ForeignKey, DateTime, Text, Enum,
-    UniqueConstraint, JSON,
+    UniqueConstraint, Index, JSON,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -71,6 +71,16 @@ class SavedExam(Base):
 
 class Reminder(Base):
     __tablename__ = "reminders"
+    __table_args__ = (
+        Index(
+            "uq_reminder_identity",
+            "user_id",
+            "exam_id",
+            "reminder_type",
+            "remind_at",
+            unique=True,
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -79,6 +89,9 @@ class Reminder(Base):
     remind_at = Column(DateTime(timezone=True), nullable=False)
     is_sent = Column(Boolean, default=False)
     push_sent = Column(Boolean, default=False, nullable=False)
+    push_attempts = Column(Integer, default=0, nullable=False)
+    push_next_attempt_at = Column(DateTime(timezone=True), nullable=True)
+    push_last_error = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="reminders")
