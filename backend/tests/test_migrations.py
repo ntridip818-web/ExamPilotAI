@@ -53,7 +53,7 @@ def test_upgrade_deduplicates_existing_reminders_and_preserves_delivery_state(tm
             unique_identity = next(
                 index for index in indexes if index["name"] == "uq_reminder_identity"
             )
-            assert unique_identity["unique"] is True
+            assert bool(unique_identity["unique"]) is True
             assert unique_identity["column_names"] == [
                 "user_id", "exam_id", "reminder_type", "remind_at"
             ]
