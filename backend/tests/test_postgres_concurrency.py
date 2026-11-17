@@ -148,3 +148,51 @@ def test_two_workers_skip_a_reminder_locked_by_the_first_worker(postgres_schema,
         assert session.get(Reminder, reminder_id).push_sent is True
     finally:
         session.close()
+
+
+
+def test_two_email_workers_skip_a_reminder_locked_by_the_first_worker(postgres_schema, monkeypatch):
+    from app import reminder_worker
+
+    factory = postgres_schema
+    reminder_id, _, _ = seed_due_reminder(factory)
+    # This reminder is due for email delivery as well.
+    monkeypatch.setattr(reminder_worker, "send_email", lambda *args, **kwargs: None)
+
+    first_send_started = threading.Event()
+    release_first_send = threading.Event()
+    first_result = {}
+
+    def blocking_send(*args, **kwargs):
+        first_send_started.set()
+        assert release_first_send.wait(timeout=10), "test timed out waiting to release email worker 1"
+
+    def run_first_worker():
+        session = factory()
+        try:
+            first_result["sent"] = reminder_worker.process_reminders(session)
+        finally:
+            session.close()
+
+    with patch.object(reminder_worker, "send_email", side_effect=blocking_send):
+        thread = threading.Thread(target=run_first_worker)
+        thread.start()
+        assert first_send_started.wait(timeout=10), "email worker 1 did not claim and start sending"
+
+        second_session = factory()
+        try:
+            second_result = reminder_worker.process_reminders(second_session)
+        finally:
+            second_session.close()
+
+        release_first_send.set()
+        thread.join(timeout=10)
+
+    assert not thread.is_alive()
+    assert first_result["sent"] == 1
+    assert second_result == 0
+    session = factory()
+    try:
+        assert session.get(Reminder, reminder_id).is_sent is True
+    finally:
+        session.close()
