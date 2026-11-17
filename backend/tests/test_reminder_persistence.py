@@ -55,7 +55,7 @@ def test_app():
 
 
 def test_create_then_list_reminder_persists_after_reload(test_app):
-    client, db, user, exam, _, _ = test_app
+    client, db, user, exam, _, _, _ = test_app
     remind_at = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
 
     response = client.post(
@@ -78,7 +78,7 @@ def test_create_then_list_reminder_persists_after_reload(test_app):
 
 
 def test_multiple_reminders_for_same_exam_are_preserved(test_app):
-    client, _, user, exam, _, _ = test_app
+    client, _, user, exam, _, _, _ = test_app
     for days in (1, 2):
         response = client.post(
             "/reminders/",
@@ -98,7 +98,7 @@ def test_multiple_reminders_for_same_exam_are_preserved(test_app):
 
 
 def test_reminder_endpoints_reject_other_users(test_app):
-    client, _, user, exam, _, _ = test_app
+    client, _, user, exam, _, _, _ = test_app
     response = client.get(f"/reminders/user/{user.id + 999}")
     assert response.status_code == 403
 
@@ -116,7 +116,7 @@ def test_reminder_endpoints_reject_other_users(test_app):
 
 
 def test_automatic_reminder_endpoints_are_idempotent_sequentially(test_app):
-    client, db, user, exam, _, _ = test_app
+    client, db, user, exam, _, _, _ = test_app
     future = datetime.now(timezone.utc) + timedelta(days=40)
     exam.application_end_date = future
     exam.exam_date = future + timedelta(days=10)
