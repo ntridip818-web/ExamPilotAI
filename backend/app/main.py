@@ -7,12 +7,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from app.core.auth import require_cleanup_token
-from app.core.database import Base, engine, get_db
+from app.core.database import engine, get_db
 from app.models.models import Exam, SavedExam, Reminder
 from app.routers import exams, users, saved_exams, reminders, push_subscriptions
 from app.services.push_worker import process_due_push_notifications
-
-Base.metadata.create_all(bind=engine)
 
 
 @asynccontextmanager
