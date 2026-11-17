@@ -19,8 +19,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt pytest httpx
       - name: Compile Python modules
-        run: python -m compileall -q backend/app
-      - name: Run push reminder regression tests
+        env:
+          PYTHONPATH: backend
+        run: python -m compileall -q backend/app backend/migrations
+      - name: Upgrade a clean SQLite database
+        env:
+          PYTHONPATH: backend
+          DATABASE_URL: sqlite:///./migration_ci.db
+        run: |
+          cd backend
+          alembic upgrade head
+      - name: Run backend regression tests
         env:
           PYTHONPATH: backend
           DATABASE_URL: sqlite:///./test_ci.db
