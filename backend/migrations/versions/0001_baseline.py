@@ -23,12 +23,12 @@ def upgrade():
     op.create_table(
         "users",
         sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("email", sa.String(), nullable=False, unique=True),
+        sa.Column("email", sa.String(), nullable=False),
         sa.Column("full_name", sa.String(), nullable=True),
         sa.Column("state", sa.String(), nullable=True),
         sa.Column("education_level", sa.String(), nullable=True),
         sa.Column("category", sa.String(), nullable=True),
-        sa.Column("firebase_uid", sa.String(), nullable=True, unique=True),
+        sa.Column("firebase_uid", sa.String(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
     op.create_index("ix_users_id", "users", ["id"])
@@ -80,7 +80,7 @@ def upgrade():
         "push_subscriptions",
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.id"), nullable=False),
-        sa.Column("endpoint", sa.Text(), nullable=False, unique=True),
+        sa.Column("endpoint", sa.Text(), nullable=False),
         sa.Column("subscription", sa.JSON(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
