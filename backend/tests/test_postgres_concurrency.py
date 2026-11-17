@@ -152,7 +152,7 @@ def test_two_workers_skip_a_reminder_locked_by_the_first_worker(postgres_schema,
 
 
 def test_two_email_workers_skip_a_reminder_locked_by_the_first_worker(postgres_schema, monkeypatch):
-    from app import reminder_worker
+    import reminder_worker
 
     factory = postgres_schema
     reminder_id, _, _ = seed_due_reminder(factory)
