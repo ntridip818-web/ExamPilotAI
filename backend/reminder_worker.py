@@ -32,6 +32,11 @@ def process_reminders(db: Session) -> int:
         .join(User, Reminder.user_id == User.id)
         .join(Exam, Reminder.exam_id == Exam.id)
         .filter(Reminder.is_sent.is_(False), Reminder.remind_at <= now)
+        .order_by(Reminder.remind_at.asc(), Reminder.id.asc())
+        .limit(50)
+        # Claim only the reminder row. Locks remain held through email delivery
+        # and the sent-state commit, so parallel workers skip claimed reminders.
+        .with_for_update(of=Reminder, skip_locked=True)
         .all()
     )
 
