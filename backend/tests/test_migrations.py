@@ -7,6 +7,7 @@ def test_upgrade_deduplicates_existing_reminders_and_preserves_delivery_state(tm
     database_path = tmp_path / "legacy-reminders.db"
     database_url = f"sqlite:///{database_path}"
     config = Config("backend/alembic.ini")
+    config.set_main_option("script_location", "backend/migrations")
     config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
     # Simulate a database at the previous schema revision, before the safety
