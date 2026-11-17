@@ -1,9 +1,9 @@
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from pywebpush import WebPushException, webpush
-from sqlalchemy import exists
+from sqlalchemy import exists, or_
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
@@ -24,21 +24,26 @@ def process_due_push_notifications():
 
     try:
         now = datetime.now(timezone.utc)
-        # Exclude reminders without any registered device from the batch query.
-        # Otherwise the oldest 50 such reminders could occupy every scheduler run
-        # and prevent reminders later in the queue from being processed.
         has_subscription = exists().where(
             PushSubscription.user_id == Reminder.user_id
         )
+        # PostgreSQL workers claim disjoint rows. The row locks remain held
+        # until this batch commits, preventing another API instance from
+        # delivering the same reminder concurrently.
         reminders = (
             db.query(Reminder)
             .filter(
                 Reminder.push_sent.is_(False),
                 Reminder.remind_at <= now,
+                or_(
+                    Reminder.push_next_attempt_at.is_(None),
+                    Reminder.push_next_attempt_at <= now,
+                ),
                 has_subscription,
             )
-            .order_by(Reminder.remind_at.asc())
+            .order_by(Reminder.remind_at.asc(), Reminder.id.asc())
             .limit(50)
+            .with_for_update(skip_locked=True)
             .all()
         )
 
@@ -51,6 +56,7 @@ def process_due_push_notifications():
             )
 
             delivered = False
+            failure_messages = []
             payload = json.dumps({
                 "title": "ExamPilotAI Reminder",
                 "body": f"{reminder.exam.title} — {reminder.reminder_type.value.replace('_', ' ').title()}",
@@ -70,19 +76,30 @@ def process_due_push_notifications():
                 except WebPushException as exc:
                     status = getattr(getattr(exc, "response", None), "status_code", None)
                     if status in (404, 410):
-                        # Remove expired subscriptions so they don't get retried forever.
                         db.delete(subscription)
                     else:
-                        errors.append(f"reminder {reminder.id}: {exc}")
+                        failure_messages.append(str(exc))
                 except Exception as exc:
-                    errors.append(f"reminder {reminder.id}: {exc}")
+                    failure_messages.append(str(exc))
 
+            # Delivery policy: one successful device delivery completes this
+            # reminder. Other devices that failed in the same batch are not
+            # retried, avoiding duplicate notifications to already-successful
+            # devices. Per-device delivery tracking would be a separate schema.
             if delivered:
-                # This flag tracks push delivery only. Do not set is_sent here:
-                # that field may represent overall/email completion and email is
-                # not sent by this worker.
                 reminder.push_sent = True
+                reminder.push_next_attempt_at = None
+                reminder.push_last_error = None
                 sent += 1
+            elif failure_messages:
+                reminder.push_attempts = (reminder.push_attempts or 0) + 1
+                delay_minutes = min(60, 2 ** min(reminder.push_attempts - 1, 6))
+                reminder.push_next_attempt_at = now + timedelta(minutes=delay_minutes)
+                reminder.push_last_error = "; ".join(failure_messages)[:2000]
+                errors.extend(
+                    f"reminder {reminder.id}: {message}"
+                    for message in failure_messages
+                )
 
         db.commit()
         return {"processed": processed, "sent": sent, "errors": errors}
