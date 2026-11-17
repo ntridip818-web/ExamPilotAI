@@ -30,7 +30,10 @@ def save_push_subscription(
 
     if existing:
         if existing.user_id != current_user.id:
-            existing.user_id = current_user.id
+            raise HTTPException(
+                status_code=409,
+                detail="This push endpoint is already registered to another account",
+            )
         existing.subscription = payload.subscription
         db.commit()
         db.refresh(existing)
