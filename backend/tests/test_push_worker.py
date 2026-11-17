@@ -192,6 +192,44 @@ def test_transient_failure_sets_exponential_retry_backoff(db_session):
         session.close()
 
 
+def test_all_devices_failing_keeps_reminder_retryable(db_session):
+    SessionFactory, reminder_id, _, user_id = db_session
+    session = SessionFactory()
+    try:
+        session.add(PushSubscription(
+            user_id=user_id,
+            endpoint="https://push.example.test/second",
+            subscription={"endpoint": "https://push.example.test/second", "keys": {"p256dh": "x", "auth": "y"}},
+        ))
+        session.commit()
+    finally:
+        session.close()
+
+    with patch.object(
+        push_worker,
+        "webpush",
+        side_effect=[
+            RuntimeError("first device unavailable"),
+            RuntimeError("second device unavailable"),
+        ],
+    ) as send:
+        result = push_worker.process_due_push_notifications()
+
+    assert send.call_count == 2
+    assert result["sent"] == 0
+    assert len(result["errors"]) == 2
+    session = SessionFactory()
+    try:
+        reminder = session.get(Reminder, reminder_id)
+        assert reminder.push_sent is False
+        assert reminder.push_attempts == 1
+        assert reminder.push_next_attempt_at is not None
+        assert "first device unavailable" in reminder.push_last_error
+        assert "second device unavailable" in reminder.push_last_error
+    finally:
+        session.close()
+
+
 def test_one_successful_device_completes_multi_device_delivery_policy(db_session):
     SessionFactory, reminder_id, _, user_id = db_session
     session = SessionFactory()
