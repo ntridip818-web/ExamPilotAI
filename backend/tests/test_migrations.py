@@ -1,13 +1,16 @@
 from alembic import command
 from alembic.config import Config
+from pathlib import Path
+
 from sqlalchemy import create_engine, inspect, text
 
 
 def test_upgrade_deduplicates_existing_reminders_and_preserves_delivery_state(tmp_path):
     database_path = tmp_path / "legacy-reminders.db"
     database_url = f"sqlite:///{database_path}"
-    config = Config("backend/alembic.ini")
-    config.set_main_option("script_location", "backend/migrations")
+    backend_dir = Path(__file__).resolve().parents[1]
+    config = Config(str(backend_dir / "alembic.ini"))
+    config.set_main_option("script_location", str(backend_dir / "migrations"))
     config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
     # Simulate a database at the previous schema revision, before the safety
