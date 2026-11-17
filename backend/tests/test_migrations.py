@@ -5,12 +5,15 @@ from pathlib import Path
 from sqlalchemy import create_engine, inspect, text
 
 
-def test_upgrade_deduplicates_existing_reminders_and_preserves_delivery_state(tmp_path):
+def test_upgrade_deduplicates_existing_reminders_and_preserves_delivery_state(tmp_path, monkeypatch):
     database_path = tmp_path / "legacy-reminders.db"
     database_url = f"sqlite:///{database_path}"
     backend_dir = Path(__file__).resolve().parents[1]
     config = Config(str(backend_dir / "alembic.ini"))
     config.set_main_option("script_location", str(backend_dir / "migrations"))
+    # env.py honors DATABASE_URL for application migrations; this isolated
+    # test must use its own temporary SQLite database instead.
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
     # Simulate a database at the previous schema revision, before the safety
