@@ -4,7 +4,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from app.core.database import Base, DATABASE_URL
+from app.core.database import Base
 from app.models import models  # noqa: F401 - register model metadata
 
 config = context.config
@@ -12,7 +12,9 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
-config.set_main_option("sqlalchemy.url", os.getenv("DATABASE_URL", DATABASE_URL).replace("%", "%%"))
+database_url = os.getenv("DATABASE_URL")
+if database_url:
+    config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
 
 def run_migrations_offline():
