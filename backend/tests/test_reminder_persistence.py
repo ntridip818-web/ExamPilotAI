@@ -245,3 +245,32 @@ def test_email_worker_commits_each_success_before_later_send_fails(test_app, mon
     db.expire_all()
     assert db.get(Reminder, first_id).is_sent is True
     assert db.get(Reminder, second_id).is_sent is False
+
+
+def test_send_email_includes_resend_idempotency_key(monkeypatch):
+    import reminder_worker
+
+    captured = {}
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+    def fake_post(url, **kwargs):
+        captured["url"] = url
+        captured.update(kwargs)
+        return Response()
+
+    monkeypatch.setenv("RESEND_API_KEY", "test-api-key")
+    monkeypatch.setenv("REMINDER_FROM_EMAIL", "reminders@example.test")
+    monkeypatch.setattr(reminder_worker.requests, "post", fake_post)
+
+    reminder_worker.send_email(
+        "student@example.test",
+        "Exam reminder",
+        "<p>Reminder</p>",
+        "exampilotai-reminder-123",
+    )
+
+    assert captured["headers"]["Idempotency-Key"] == "exampilotai-reminder-123"
+    assert captured["json"]["to"] == ["student@example.test"]
