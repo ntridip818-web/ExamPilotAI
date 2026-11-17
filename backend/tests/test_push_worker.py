@@ -108,11 +108,14 @@ def test_transient_push_failure_remains_retryable(db_session):
         session.close()
 
 
-def test_expired_subscription_is_removed(db_session):
+@pytest.mark.parametrize("status_code", [404, 410])
+def test_expired_subscription_is_removed(db_session, status_code):
     SessionFactory, reminder_id, subscription_id, _ = db_session
 
     class Response:
-        status_code = 410
+        pass
+
+    Response.status_code = status_code
 
     with patch.object(
         push_worker,
